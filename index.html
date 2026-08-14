@@ -4,16 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Lumina Run — 빛의 숲을 끝없이 달려</title>
-<meta name="description" content="프로시저럴 숲과 공중 정원을 끝없이 달리는 판타지 파쿠르. WebGL 배경 셰이더와 파티클, 절차적 오디오가 하나의 캔버스 안에서 함께 숨 쉰다." />
+<meta name="description" content="프로시저럴 숲과 공중 정원을 끝없이 달리는 판타지 파쿠르. WebGL 배경 셰이더와 파티클, 절차적 오디오가 하나의 화면 안에서 함께 숨 쉰다." />
+<meta name="theme-color" content="#1d1430" />
 <style>
   :root{
     --sky-top:#3b2c5a;
-    --sky-mid:#6b4a86;
     --sky-low:#b18bc9;
     --fog:#cfd6f0;
-    --ground:#2a3b2c;
-    --platform:#3c5240;
-    --platform-edge:#7c9a84;
     --glow:#8fe9c9;
     --seed:#f5d76e;
     --text:#f2ecf5;
@@ -21,116 +18,201 @@
     --danger:#e8707a;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;overflow:hidden;background:#0c0a14;color:var(--text);font-family:'Segoe UI', system-ui, -apple-system, sans-serif;-webkit-font-smoothing:antialiased;touch-action:manipulation}
-  #app{position:fixed;inset:0;display:flex;flex-direction:column}
-  canvas{display:block;width:100%;height:100%;image-rendering:auto;outline:none}
+  html,body{height:100%;overflow:hidden;background:#7f8ad2;color:var(--text);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;-webkit-font-smoothing:antialiased;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #app{position:fixed;inset:0}
+
+  /* 두 개의 레이어: WebGL 배경 + 2D 게임 */
+  #scene{position:absolute;inset:0;overflow:hidden;touch-action:none}
+  #bg,#game{position:absolute;top:0;left:0;display:block;width:100%;height:100%;outline:none}
+  #bg{z-index:1}
+  #game{z-index:2}
+  /* WebGL이 없을 때를 위한 정적 하늘 */
+  #scene{background:linear-gradient(180deg,#6d78c8 0%, #9b9ddc 34%, #d3b9de 62%, #f6dcd4 100%)}
+
   /* HUD */
-  .hud{position:absolute;pointer-events:none;user-select:none}
+  .hud{position:absolute;z-index:5;pointer-events:none;user-select:none}
   .hud-top{top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-  .stat{font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-shadow:0 1px 4px rgba(0,0,0,.5)}
-  .stat b{display:block;font-size:26px;font-weight:600;color:var(--text);letter-spacing:.04em;text-shadow:0 2px 8px rgba(0,0,0,.55);margin-top:2px}
-  .seed-tag{font-size:11px;letter-spacing:.22em;color:var(--muted);border:1px solid rgba(255,255,255,.12);padding:5px 10px;border-radius:999px;backdrop-filter:blur(6px);background:rgba(10,8,20,.25)}
+  /* 밝은 하늘 위에서도 판독되도록 HUD는 자체 배경을 가진다 */
+  .hud-left{display:flex;gap:24px;padding:8px 16px;border-radius:16px;
+    background:rgba(22,18,44,.34);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12)}
+  .hud-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+  .stat{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#dbe1f2;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .stat b{display:block;font-size:26px;font-weight:600;color:#fff;letter-spacing:.02em;
+    text-shadow:0 2px 8px rgba(0,0,0,.5);margin-top:1px;font-variant-numeric:tabular-nums;line-height:1.1}
+  .stat.small b{font-size:17px;color:#dbe1f2}
+  .chip{font-size:11px;letter-spacing:.18em;color:#e6eafa;border:1px solid rgba(255,255,255,.18);
+    padding:6px 11px;border-radius:999px;background:rgba(22,18,44,.4);backdrop-filter:blur(8px);white-space:nowrap;
+    text-shadow:0 1px 3px rgba(0,0,0,.5)}
+  button.chip{pointer-events:auto;cursor:pointer;font-family:inherit;transition:background .15s ease,border-color .15s ease}
+  button.chip:hover{background:rgba(22,18,44,.62);border-color:rgba(255,255,255,.4)}
+  button.chip:focus-visible{outline:2px solid #fff;outline-offset:2px}
   .hud-bottom{bottom:0;left:0;right:0;padding:16px 18px;display:flex;justify-content:center}
-  .hint{font-size:12px;letter-spacing:.2em;color:var(--muted);text-shadow:0 1px 6px rgba(0,0,0,.6);opacity:.85}
-  /* 오버레이 */
-  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;pointer-events:auto;background:radial-gradient(ellipse at 50% 40%, rgba(40,25,70,.45), rgba(8,5,16,.85) 80%)}
-  .overlay h1{font-size:clamp(34px,9vw,72px);font-weight:700;letter-spacing:.01em;color:var(--text);text-shadow:0 4px 18px rgba(0,0,0,.5);margin-bottom:10px}
-  .overlay p{font-size:15px;color:var(--muted);max-width:440px;line-height:1.6;margin-bottom:22px}
-  .overlay .seed-line{font-size:12px;letter-spacing:.2em;color:var(--muted);margin-bottom:18px}
-  .btn-pointer{pointer-events:auto}
-  .btn{pointer-events:auto;display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:180px;padding:14px 22px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(180deg,#8fe9c9 0%, #5fc8a8 100%);color:#06211a;font-weight:600;letter-spacing:.06em;font-size:15px;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 28px rgba(143,233,201,.35);transition:transform .12s ease, box-shadow .12s ease}
-  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(143,233,201,.45)}
+  .hint{font-size:11px;letter-spacing:.18em;color:#eef1fb;text-align:center;
+    background:rgba(22,18,44,.34);backdrop-filter:blur(8px);padding:7px 14px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.1);text-shadow:0 1px 3px rgba(0,0,0,.5);
+    transition:opacity .8s ease}
+  .hint.fade{opacity:0}
+
+  /* 오버레이 공통 */
+  .veil{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:24px;
+    background:radial-gradient(ellipse at 50% 42%, rgba(46,34,86,.30), rgba(16,11,34,.72) 78%)}
+  .veil[hidden]{display:none}
+  .veil h1{font-size:clamp(34px,9vw,72px);font-weight:700;letter-spacing:.01em;text-shadow:0 4px 18px rgba(0,0,0,.5);margin-bottom:10px}
+  .veil h2{font-size:clamp(26px,6vw,44px);font-weight:700;margin-bottom:16px;text-shadow:0 4px 18px rgba(0,0,0,.5)}
+  .veil p{font-size:15px;color:var(--muted);max-width:460px;line-height:1.65;margin-bottom:20px}
+  .seed-line{font-size:11px;letter-spacing:.2em;color:var(--muted);margin-bottom:18px}
+  .seed-line b{color:var(--text);font-weight:600}
+  .keys{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-bottom:26px;font-size:11px;letter-spacing:.14em;color:var(--muted)}
+  .keys span b{display:inline-block;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:2px 7px;
+    margin-right:6px;color:var(--text);font-weight:600;background:rgba(255,255,255,.06)}
+  .btn{pointer-events:auto;display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:180px;
+    padding:14px 22px;border-radius:999px;border:1px solid rgba(255,255,255,.18);
+    background:linear-gradient(180deg,#8fe9c9 0%, #5fc8a8 100%);color:#06211a;font-family:inherit;font-weight:600;
+    letter-spacing:.06em;font-size:14px;text-transform:uppercase;cursor:pointer;
+    box-shadow:0 8px 28px rgba(143,233,201,.32);transition:transform .12s ease, box-shadow .12s ease}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(143,233,201,.42)}
   .btn:active{transform:translateY(0)}
-  /* 결과 팝업 */
-  .result-card{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 50%, rgba(30,18,55,.55), rgba(6,4,12,.9) 80%);backdrop-filter:blur(6px)}
-  .result-card.show{display:flex}
-  .result-card h2{font-size:clamp(28px,6vw,46px);font-weight:700;margin-bottom:14px;text-shadow:0 4px 18px rgba(0,0,0,.5)}
-  .result-stats{display:flex;gap:26px;margin-bottom:22px;flex-wrap:wrap;justify-content:center}
-  .result-stat{text-align:center}
-  .result-stat .label{font-size:11px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
-  .result-stat .value{font-size:32px;font-weight:600;margin-top:4px;color:var(--text)}
-  .result-stat .value.good{color:var(--glow)}
-  .result-stat .value.best{color:var(--seed)}
-  .result-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
-  .btn-secondary{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--text);box-shadow:none}
-  .btn-secondary:hover{background:rgba(255,255,255,.08)}
-  /* 시작 인트로 */
-  .intro-banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-  .intro-banner .line{position:absolute;bottom:24%;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:.28em;color:rgba(242,236,245,.85);text-shadow:0 2px 10px rgba(0,0,0,.6);animation:fadeSlide 2.4s ease-out forwards}
-  @keyframes fadeSlide{0%{opacity:0;transform:translateX(-50%) translateY(10px)}30%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-14px)}}
-  /* 모바일 전용 힌트 */
-  .touch-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:.18em;color:rgba(242,236,245,.6);text-shadow:0 1px 6px rgba(0,0,0,.6);opacity:0;transition:opacity .4s ease}
-  .touch-hint.show{opacity:1}
+  .btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+  .btn.ghost{background:transparent;border-color:rgba(255,255,255,.22);color:var(--text);box-shadow:none;min-width:150px}
+  .btn.ghost:hover{background:rgba(255,255,255,.08);box-shadow:none}
+
+  /* 결과 */
+  .result-stats{display:flex;gap:28px;margin-bottom:20px;flex-wrap:wrap;justify-content:center}
+  .result-stat .label{font-size:10px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
+  .result-stat .value{font-size:32px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+  .value.good{color:var(--glow)}
+  .value.best{color:var(--seed)}
+  .newbest{min-height:20px;font-size:12px;letter-spacing:.24em;color:var(--seed);margin-bottom:16px;text-transform:uppercase}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .toast{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:.16em;
+    color:var(--muted);background:rgba(10,8,20,.6);border:1px solid rgba(255,255,255,.12);padding:8px 14px;
+    border-radius:999px;opacity:0;transition:opacity .3s ease;pointer-events:none}
+  .toast.show{opacity:1}
+
+  /* 인트로 배너 */
+  .intro{position:absolute;inset:0;z-index:6;display:flex;align-items:flex-end;justify-content:center;
+    padding-bottom:26vh;pointer-events:none}
+  .intro[hidden]{display:none}
+  .intro span{font-size:13px;letter-spacing:.28em;color:rgba(242,236,245,.9);text-shadow:0 2px 10px rgba(0,0,0,.6);
+    animation:fadeSlide 1.1s ease-out forwards}
+  @keyframes fadeSlide{0%{opacity:0;transform:translateY(12px)}35%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+  .hint .narrow{display:none}
+  @media (max-width:600px){
+    .hud-left{gap:16px;padding:7px 13px}
+    .stat b{font-size:21px}
+    .keys{gap:12px}
+    .hint{font-size:10px;letter-spacing:.12em;padding:6px 11px}
+    .hint .wide{display:none}
+    .hint .narrow{display:inline}
+    .btn{min-width:150px;padding:13px 18px;font-size:13px}
+    .actions{gap:9px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .intro span{animation-duration:.01ms}
+    .btn{transition:none}
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <!--
-    = 방향 계약서 (impeccable new-work §5) =
-    THESIS: 하나의 정적 HTML이 WebGL/GLSL 배경 셰이더 + procedural noise 지형 + 파티클 + 절차적 오디오를 동시에 품은 판타지 파쿠르를 증명한다. 카테고리 기본값인 "단순 캔버스 러너"가 아니라, 매 장면이 분위기와 깊이를 가진 세계로 보이게 만든다.
-    OWN-WORLD: 밝고 생명력 있는 판타지/자연. 연한 하늘~라벤더 하늘, 초록/이끼 계열 지형, 군데군데 빛나는 마법 포인트. 배경=WebGL 셰이더, 캐릭터/지형/파티클=2D 캔버스. 글로우·바람·먼 산 대기 원근감.
-    STORY: 짧은 인트로 컷 후 바로 달린다. 점프·좌우 이동·변수 점프·수집(씨앗)으로 더 멀리. 매 러닝은 새 지형(시트 재현 가능), 기록은 localStorage에. 시드로 친구와 같은 세계 공유.
-    FIRST VIEWPORT: 풀스크린 캔버스. 바람·빛·먼 산. 아래에서 지형이 자라나고 캐릭터가 앞장섬. 상단에 거리/점수/시드, 구석에 다시 달리기 힌트. 10초 안에 무엇을 하는지 이해.
-    FORM: WebGL 셰이더 배경 레이어 + 2D 캔버스 게임 루프. 키보드 Space/↑/W=점프(변수), ←/→=이동. 모바일 탭=점프(길게=높게), 스와이프=이동.
-    FINISH: unreviewed and undocumented is unfinished; 이 빌드는 finish review, verdict, DESIGN.md로 끝난다.
+    = 방향 계약서 =
+    THESIS: 하나의 정적 HTML이 WebGL/GLSL 배경 셰이더 + procedural noise 지형 + 파티클 + 절차적 오디오를
+            동시에 품은 판타지 파쿠르를 증명한다.
+    OWN-WORLD: 밝고 생명력 있는 판타지/자연. 라벤더 하늘, 이끼 낀 절벽, 빛나는 씨앗.
+               배경=WebGL 셰이더(#bg), 지형/캐릭터/파티클=2D 캔버스(#game).
+    STORY: 짧은 인트로 후 바로 달린다. 절벽 사이를 뛰어 넘고 씨앗을 모아 더 멀리.
+           시드로 지형 재현·공유, 기록은 localStorage.
+    FORM: Space/↑/W=점프(길게=높게), ←→=감속/가속, R=재시작, M=음소거, P/Esc=일시정지.
+          터치: 탭=점프, 좌우 스와이프=감속/가속.
   -->
-  <canvas id="game" aria-label="Lumina Run — 빛의 숲 파쿠르 게임"></canvas>
-
-  <div class="hud hud-top" aria-hidden="true">
-    <div class="stat"><span>거리</span><b id="dist">0</b></div>
-    <div class="stat"><span>수집</span><b id="seedCount">0</b></div>
-    <div class="seed-tag" id="seedTag">seed · <span id="seedVal">—</span></div>
+  <div id="scene">
+    <canvas id="bg" aria-hidden="true"></canvas>
+    <canvas id="game" aria-label="Lumina Run 게임 화면"></canvas>
   </div>
 
-  <div class="hud hud-bottom" aria-hidden="true">
-    <div class="hint" id="hint">공간바 / 탭 — 점프 · ←→ / 스와이프 — 이동</div>
+  <div class="hud hud-top">
+    <div class="hud-left">
+      <div class="stat">거리<b id="dist">0</b></div>
+      <div class="stat">수집<b id="seedCount">0</b></div>
+      <div class="stat small">베스트<b id="bestVal">0</b></div>
+    </div>
+    <div class="hud-right">
+      <div class="chip">seed · <span id="seedVal">—</span></div>
+      <button class="chip" id="muteBtn" type="button" aria-pressed="false">♪ 소리 켬</button>
+    </div>
   </div>
 
-  <div class="intro-banner" id="introBanner" aria-hidden="true">
-    <div class="line">▶ 공간바 또는 탭으로 시작</div>
+  <div class="hud hud-bottom">
+    <div class="hint" id="hint">
+      <span class="wide">space / 탭 — 점프 (길게 = 더 높이) · ← → / 스와이프 — 감속·가속</span>
+      <span class="narrow">탭 — 점프 (길게 = 더 높이) · 스와이프 — 감속·가속</span>
+    </div>
   </div>
 
-  <div class="overlay" id="startOverlay">
-    <h1 id="gameTitle">Lumina Run</h1>
-    <p id="tagline">프로시저럴 숲과 공중 정원을 끝없이 달린다 — 매 러닝이 다른 세계.</p>
-    <div class="seed-line" id="startSeedLine">seed · <span id="startSeedVal">random</span></div>
-    <button class="btn btn-pointer" id="startBtn" type="button">달리기 시작</button>
+  <div class="intro" id="intro" hidden><span>▶ 달린다</span></div>
+
+  <div class="veil" id="startVeil">
+    <h1>Lumina Run</h1>
+    <p>빛의 숲을 끝없이 달린다. 절벽 사이를 뛰어 넘고, 흩어진 씨앗을 모아 더 멀리 — 매 러닝이 다른 세계.</p>
+    <div class="seed-line">seed · <b id="startSeedVal">—</b></div>
+    <div class="keys">
+      <span><b>Space</b>점프</span>
+      <span><b>← →</b>감속·가속</span>
+      <span><b>R</b>재시작</span>
+      <span><b>M</b>음소거</span>
+    </div>
+    <button class="btn" id="startBtn" type="button">달리기 시작</button>
   </div>
 
-  <div class="result-card" id="resultCard" role="dialog" aria-live="polite" aria-label="런 결과">
+  <div class="veil" id="resultVeil" role="dialog" aria-label="런 결과" hidden>
     <h2 id="resultTitle">런 완료</h2>
     <div class="result-stats">
       <div class="result-stat"><div class="label">거리</div><div class="value" id="resultDist">0</div></div>
       <div class="result-stat"><div class="label">수집</div><div class="value good" id="resultSeeds">0</div></div>
+      <div class="result-stat"><div class="label">점수</div><div class="value" id="resultScore">0</div></div>
       <div class="result-stat"><div class="label">베스트</div><div class="value best" id="resultBest">0</div></div>
-      <div class="result-stat"><div class="label">새 기록</div><div class="value" id="resultNewRecord" style="color:var(--danger)">—</div></div>
     </div>
-    <div class="seed-line" id="resultSeedLine">seed · <span id="resultSeedVal">—</span></div>
-    <div class="result-actions">
-      <button class="btn btn-pointer" id="retryBtn" type="button">다시 달리기</button>
-      <button class="btn btn-secondary btn-pointer" id="newSeedBtn" type="button">다른 세계</button>
+    <div class="newbest" id="newBest"></div>
+    <div class="seed-line">seed · <b id="resultSeedVal">—</b></div>
+    <div class="actions">
+      <button class="btn" id="retryBtn" type="button">같은 세계 재도전</button>
+      <button class="btn ghost" id="newSeedBtn" type="button">다른 세계</button>
+      <button class="btn ghost" id="shareBtn" type="button">시드 링크 복사</button>
     </div>
+    <div class="toast" id="toast"></div>
   </div>
 
-  <div class="touch-hint" id="touchHint">탭 = 점프 · 좌우 스와이프 = 이동</div>
+  <div class="veil" id="pauseVeil" hidden>
+    <h2>잠시 멈춤</h2>
+    <p>P 또는 Esc로 이어서 달린다.</p>
+    <button class="btn" id="resumeBtn" type="button">이어서 달리기</button>
+  </div>
+
+  <p class="sr-only" id="live" role="status" aria-live="polite"></p>
 </div>
 
 <script>
+"use strict";
 /* ============================================================
    Lumina Run — 단일 HTML 판타지 파쿠르
-   배경: WebGL/GLSL 셰이더 (대기·먼 산·바람 결·색 보정)
-   게임: 2D 캔버스 (캐릭터, 지형, 파티클, 수집물)
-   오디오: Web Audio API 절차적 신스 (발소리·차임·패드)
+   #bg   : WebGL/GLSL 배경 셰이더 (하늘·태양·구름·먼 산·안개)
+   #game : 2D 캔버스 (시차 숲, 절벽 지형, 씨앗, 파티클, 캐릭터)
+   audio : Web Audio API 절차적 신스 (발소리·착지·차임·패드·추락)
    ============================================================ */
 
-// ---------- 유틸리티 ----------
+/* ---------- 유틸 ---------- */
 const $ = (id) => document.getElementById(id);
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
 const lerp = (a, b, t) => a + (b - a) * t;
-const rand = (lo, hi) => lo + Math.random() * (hi - lo);
-const shuffle = (arr) => { for (let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];} return arr; };
 
-// 시드 기반 난수 (Mulberry32) — 같은 시드면 같은 지형
+/* 시드 기반 난수 (Mulberry32) — 같은 시드면 같은 세계 */
 function mulberry32(a){
   return function(){
     a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -139,1066 +221,1585 @@ function mulberry32(a){
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+let rng = mulberry32(1);
+const rnd = (lo, hi) => lo + rng() * (hi - lo);
+const rndInt = (lo, hi) => Math.floor(lo + rng() * (hi - lo + 1));
 
-// ---------- 캔버스 셋업 ----------
-const canvas = $('game');
-const gl = canvas.getContext('webgl', { alpha:false, antialias:true, premultipliedAlpha:false }) || canvas.getContext('experimental-webgl', { alpha:false });
-const ctx2 = canvas.getContext('2d', { alpha:false, willReadFrequently:false });
+/* 위치에서 바로 뽑는 결정적 해시 — 장식 요소가 스크롤해도 제자리에 있게 */
+const hash1 = (x) => {
+  const s = Math.sin(x * 12.9898) * 43758.5453;
+  return s - Math.floor(s);
+};
 
-let W=0, H=0, DPR=1;
+const reduceMotion = window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 캔버스 ---------- */
+const bgCanvas = $('bg');
+const gameCanvas = $('game');
+const ctx = gameCanvas.getContext('2d', { alpha:true });
+let gl = null;
+try{
+  gl = bgCanvas.getContext('webgl', { alpha:false, antialias:false, depth:false, powerPreference:'low-power' })
+    || bgCanvas.getContext('experimental-webgl', { alpha:false, antialias:false, depth:false });
+}catch(e){ gl = null; }
+
+/* W,H = CSS 픽셀 화면 크기 · VW,VH = 실제로 보이는 월드 크기.
+   좁은 화면에서도 다음 섬이 보이도록 축소해서 그린다 —
+   월드 자체는 그대로라 같은 시드는 어느 기기에서나 같은 지형이다. */
+let W = 0, H = 0, DPR = 1, ZOOM = 1, VW = 0, VH = 0;
+let GROUND_FRAC = 0.60;     // 지면이 화면 어느 높이에 오는지 (세로 화면일수록 아래로)
+const VIEW_MIN = 760;
 function resize(){
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = Math.floor(W * DPR);
-  canvas.height = Math.floor(H * DPR);
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  if(gl){ gl.viewport(0,0, canvas.width, canvas.height); }
+  W = Math.max(320, window.innerWidth);
+  H = Math.max(240, window.innerHeight);
+  ZOOM = clamp(W / VIEW_MIN, 0.6, 1);
+  VW = W / ZOOM;
+  VH = H / ZOOM;
+  GROUND_FRAC = clamp(0.60 + (0.95 - W / H) * 0.28, 0.60, 0.76);
+  gameCanvas.width  = Math.floor(W * DPR);
+  gameCanvas.height = Math.floor(H * DPR);
+  if(gl){
+    const bdpr = Math.min(DPR, 1.5);   // 셰이더는 조금 낮은 해상도로 (성능)
+    bgCanvas.width  = Math.floor(W * bdpr);
+    bgCanvas.height = Math.floor(H * bdpr);
+    gl.viewport(0, 0, bgCanvas.width, bgCanvas.height);
+  }
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
 
-// ---------- WebGL 셰이더 배경 ----------
-// GLSL 셰이더 문자열을 여기 포함 (Solar Pro 4의 셰이더 역량 드러내기)
+/* ============================================================
+   WebGL 배경 셰이더
+   ============================================================ */
 const VERT = `
-  attribute vec2 a_pos;
-  void main(){
-    gl_Position = vec4(a_pos, 0.0, 1.0);
-  }
+attribute vec2 a_pos;
+void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }
 `;
+
 const FRAG = `
-  precision highp float;
-  uniform vec2 u_res;
-  uniform float u_time;
-  uniform vec4 u_sky;   // top, bottom
-  uniform vec4 u_haze;  // 먼 산 색
-  uniform vec4 u_fog;   // 안개
-  uniform vec4 u_sun;   // 태양 위치/색 (xyz=dir, w=강도)
-  uniform vec2 u_wind;
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2  u_res;
+uniform float u_time;
+uniform float u_horizon;   // 게임 지면과 맞춘 수평선 (0=화면 아래, 1=위)
+uniform float u_scroll;    // 카메라 x (시차)
+uniform vec3  u_skyTop;
+uniform vec3  u_skyBot;
+uniform vec3  u_haze;
+uniform vec3  u_fog;
+uniform vec3  u_sun;
+uniform float u_sunI;
+uniform float u_wind;
 
-  // 간단한 2D 노이즈를 프랙탈하게 쌓은 value noise 근사
-  float hash(vec2 p){
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  for(int i = 0; i < 4; i++){
+    v += a * vnoise(p);
+    p = p * 2.03 + vec2(17.3, 9.1);
+    a *= 0.5;
   }
-  float vnoise(vec2 p){
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f*f*(3.0-2.0*f);
-    float a = hash(i);
-    float b = hash(i+vec2(1.0,0.0));
-    float c = hash(i+vec2(0.0,1.0));
-    float d = hash(i+vec2(1.0,1.0));
-    return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
-  }
-  float fbm(vec2 p){
-    float v=0.0, a=0.5;
-    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-    for(int i=0;i<5;i++){
-      v += a * vnoise(p);
-      p = rot*p*2.0;
-      a *= 0.5;
-    }
-    return v;
-  }
+  return v;
+}
 
-  void main(){
-    vec2 uv = gl_FragCoord.xy / u_res;
-    vec2 p = uv;
-    // 화면 아래쪽이 가까워지는 대기 원근감용 depth
-    float depth = uv.y; // 0=아래, 1=위
-    // 먼 산/profile 파동 — 바람 시간 따라 느리게 흔들림
-    float horizon = 0.30 + 0.06*sin(u_time*0.15 + p.x*4.2) + 0.04*sin(u_time*0.09 + p.x*9.1);
-    float mountain = smoothstep(horizon-0.08, horizon+0.10, uv.y);
-    // 산맥 실루엣 생성: fbm으로 고도 변조
-    float mElev = fbm(vec2(p.x*8.0 + u_time*0.02, 0.0));
-    float mEdge = smoothstep(0.32 + 0.10*mElev, 0.34 + 0.10*mElev, uv.y);
+/* 능선 한 겹: x에 따라 흔들리는 실루엣 높이 */
+float ridge(float x, float freq, float amp, float base){
+  float n = fbm(vec2(x * freq, 3.7)) * 0.75 + vnoise(vec2(x * freq * 2.9, 11.3)) * 0.25;
+  return base + amp * (n - 0.5);
+}
 
-    // 하늘 그라데이션 (top→bottom)
-    vec3 skyTop = u_sky.xyz;
-    vec3 skyBot = vec3(u_sky.z, u_sky.w, 1.0); // bottom 두 채널 + 알파는 불투명
-    vec3 sky = mix(skyBot, skyTop, pow(uv.y, 0.7));
-    // 태양 글로우 (태양이 화면 위쪽에 있다고 가정)
-    float sunDir = u_sun.z; // 방향 지표
-    vec3 sunCol = u_sun.xyz;
-    float sunIntensity = u_sun.w;
-    vec2 sunPos = vec2(0.78 + 0.04*sin(u_time*0.05), 0.82 + 0.04*sin(u_time*0.07+1.2));
-    float sunDist = length(uv - sunPos);
-    float sunGlow = exp(-sunDist*14.0) * sunIntensity;
-    // 태양 주변 색 번짐
-    vec3 sunBloom = sunCol * sunGlow * 1.2;
-    // 큰 번짐 링
-    float ring = exp(-sunDist*3.0) * 0.25 * sunIntensity;
-    vec3 bloom = sunCol * ring;
+void main(){
+  vec2 uv = gl_FragCoord.xy / u_res;
+  float aspect = u_res.x / max(u_res.y, 1.0);
+  float hz = u_horizon;
 
-    // 대기 원근: 위쪽일수록 안개/희미해짐
-    float hazeAmt = smoothstep(0.0, 0.7, uv.y) * 0.5;
-    vec3 hazeCol = u_haze.xyz;
-    sky = mix(sky, hazeCol, hazeAmt);
+  /* --- 하늘 그라데이션 --- */
+  float sky_t = clamp((uv.y - hz) / max(1.0 - hz, 0.001), 0.0, 1.0);
+  vec3 col = mix(u_skyBot, u_skyTop, pow(sky_t, 0.85));
 
-    // 먼 산 색상 (희미한 보랏빛~푸른 산)
-    vec3 mCol = u_haze.zwy;
-    vec3 mColShifted = mCol * (0.8 + 0.3*mElev);
-    vec3 scene = mix(sky, mColShifted, mountain*0.9);
-    scene = mix(scene, mColShifted, mEdge*0.85);
+  /* --- 태양: 원반 + 이중 글로우 --- */
+  vec2 sunPos = vec2(0.74, hz + 0.30 + 0.012 * sin(u_time * 0.13));
+  float sd = length((uv - sunPos) * vec2(aspect, 1.0));
+  float glow = exp(-sd * 8.0) * 0.55 + exp(-sd * 2.4) * 0.22;
+  col += u_sun * glow * u_sunI;
+  col = mix(col, u_sun * 1.18, smoothstep(0.052, 0.030, sd) * 0.8);
 
-    // 산맥 디테일: 얇은 선을 fbm으로
-    float ridge = smoothstep(0.30, 0.30+0.015*abs(sin(p.x*40.0 + u_time*0.2)), uv.y);
-    scene = mix(scene, vec3(0.18,0.14,0.22), ridge*0.6);
+  /* --- 높은 구름 띠 --- */
+  float cx = uv.x * 2.6 + u_time * 0.010 * u_wind + u_scroll * 0.00003;
+  float cl = fbm(vec2(cx, uv.y * 5.0 - u_time * 0.004));
+  float band = smoothstep(hz + 0.10, hz + 0.34, uv.y) * smoothstep(1.02, 0.62, uv.y);
+  float cloud = smoothstep(0.50, 0.80, cl) * band;
+  col = mix(col, mix(u_haze, vec3(1.0), 0.42), cloud * 0.55);
 
-    // 태양 블룸 합성
-    scene += sunBloom + bloom;
+  /* --- 먼 산 3겹 (뒤에서 앞으로, 점점 진하고 빠르게) --- */
+  vec3 far  = mix(u_haze, u_skyTop, 0.16);
+  vec3 mid  = mix(u_haze, vec3(0.50, 0.52, 0.74), 0.55);
+  vec3 near = mix(u_haze, vec3(0.42, 0.56, 0.62), 0.68);
 
-    // 하단 안개/수면 느낌 (숲 바닥 근방)
-    float groundFog = (1.0 - smoothstep(0.0, 0.22, uv.y)) * 0.35;
-    scene = mix(scene, u_fog.xyz, groundFog);
+  float r0 = ridge(uv.x + u_scroll * 0.000020, 1.6, 0.120, hz + 0.150);
+  float r1 = ridge(uv.x + u_scroll * 0.000055 + 40.0, 2.7, 0.090, hz + 0.095);
+  float r2 = ridge(uv.x + u_scroll * 0.000110 + 90.0, 4.3, 0.062, hz + 0.052);
 
-    // 아주 미세한 바람 결 (수평 방향으로 움직이는 얇은 줄무늬)
-    float windStrip = sin((uv.x*300.0 + u_time*80.0*u_wind.x) + uv.y*50.0) * 0.02 + 0.98;
-    scene *= windStrip;
+  col = mix(col, far,  smoothstep(r0 + 0.003, r0 - 0.003, uv.y));
+  col = mix(col, mid,  smoothstep(r1 + 0.003, r1 - 0.003, uv.y));
+  col = mix(col, near, smoothstep(r2 + 0.003, r2 - 0.003, uv.y));
 
-    // 최종 미세 비네트
-    float vig = 1.0 - 0.35*pow(length(uv - 0.5), 2.0);
-    scene *= vig;
+  /* --- 수평선 나무선: 촘촘한 실루엣 --- */
+  float tl = ridge(uv.x + u_scroll * 0.000230 + 150.0, 12.0, 0.030, hz + 0.020);
+  col = mix(col, mix(u_haze, vec3(0.33, 0.50, 0.48), 0.80),
+            smoothstep(tl + 0.002, tl - 0.002, uv.y) * 0.9);
 
-    gl_FragColor = vec4(scene, 1.0);
-  }
+  /* --- 수평선 부근 빛 번짐 + 아래쪽 안개 --- */
+  float horizonGlow = exp(-abs(uv.y - hz) * 26.0) * 0.30;
+  col += u_sun * horizonGlow * u_sunI;
+  col = mix(col, u_fog, smoothstep(hz + 0.06, hz - 0.10, uv.y) * 0.88);
+
+  /* --- 바람 결: 아주 미세한 수평 흐름 --- */
+  float w = vnoise(vec2(uv.x * 6.0 - u_time * 0.35 * u_wind, uv.y * 30.0)) - 0.5;
+  col += w * 0.020 * smoothstep(hz - 0.05, hz + 0.35, uv.y);
+
+  /* --- 필름 그레인 + 아주 옅은 비네트 --- */
+  col += (hash(uv * u_res + fract(u_time)) - 0.5) * 0.012;
+  float vig = 1.0 - 0.14 * pow(length((uv - 0.5) * vec2(aspect * 0.75, 1.0)), 2.0);
+  col *= vig;
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
 `;
 
-let progHandle = null;
-function ensureShaderProgram(){
-  if(progHandle) return progHandle;
-  const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, VERT); gl.compileShader(vs);
-  if(!gl.getShaderParameter(vs, gl.COMPILE_STATUS)){ console.warn('vertex shader error', gl.getShaderInfoLog(vs)); }
-  const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, FRAG); gl.compileShader(fs);
-  if(!gl.getShaderParameter(fs, gl.COMPILE_STATUS)){ console.error('FRAGMENT SHADER COMPILE ERROR:', gl.getShaderInfoLog(fs)); }
-  const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.error('SHADER PROGRAM LINK ERROR:', gl.getProgramInfoLog(prog)); }
-  const u_res = gl.getUniformLocation(prog, 'u_res');
-  const u_time = gl.getUniformLocation(prog, 'u_time');
-  const u_sky = gl.getUniformLocation(prog, 'u_sky');
-  const u_haze = gl.getUniformLocation(prog, 'u_haze');
-  const u_fog = gl.getUniformLocation(prog, 'u_fog');
-  const u_sun = gl.getUniformLocation(prog, 'u_sun');
-  const u_wind = gl.getUniformLocation(prog, 'u_wind');
-  const a_pos = gl.getAttribLocation(prog, 'a_pos');
-  // fullscreen triangle
+let shader = null;
+let glReady = false;
+
+function compile(type, src, label){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(label + ' 컴파일 실패:', gl.getShaderInfoLog(s));
+    gl.deleteShader(s);
+    return null;
+  }
+  return s;
+}
+
+function initShader(){
+  if(!gl) return false;
+  const vs = compile(gl.VERTEX_SHADER, VERT, 'vertex shader');
+  const fs = compile(gl.FRAGMENT_SHADER, FRAG, 'fragment shader');
+  if(!vs || !fs) return false;
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+    console.error('셰이더 링크 실패:', gl.getProgramInfoLog(prog));
+    return false;
+  }
+  gl.deleteShader(vs); gl.deleteShader(fs);
+
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-  progHandle = {
-    prog, u_res, u_time, u_sky, u_haze, u_fog, u_sun, u_wind, a_pos, buf
+
+  const u = (n) => gl.getUniformLocation(prog, n);
+  shader = {
+    prog, buf,
+    a_pos: gl.getAttribLocation(prog, 'a_pos'),
+    res: u('u_res'), time: u('u_time'), horizon: u('u_horizon'), scroll: u('u_scroll'),
+    skyTop: u('u_skyTop'), skyBot: u('u_skyBot'), haze: u('u_haze'), fog: u('u_fog'),
+    sun: u('u_sun'), sunI: u('u_sunI'), wind: u('u_wind')
   };
-  return progHandle;
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.enableVertexAttribArray(shader.a_pos);
+  gl.vertexAttribPointer(shader.a_pos, 2, gl.FLOAT, false, 0, 0);
+  return true;
 }
-function drawBackground(t, sky, haze, fog, sun, wind){
-  if(!gl){ return; }
-  const h = ensureShaderProgram();
-  gl.useProgram(h.prog);
-  gl.uniform2f(h.u_res, canvas.width, canvas.height);
-  gl.uniform1f(h.u_time, t);
-  gl.uniform4f(h.u_sky, sky.r, sky.g, sky.b, sky.a);
-  gl.uniform4f(h.u_haze, haze.r, haze.g, haze.b, haze.a);
-  gl.uniform4f(h.u_fog, fog.r, fog.g, fog.b, fog.a);
-  gl.uniform4f(h.u_sun, sun.x, sun.y, sun.z, sun.w);
-  gl.uniform2f(h.u_wind, wind.x, wind.y);
-  gl.bindBuffer(gl.ARRAY_BUFFER, h.buf);
-  gl.enableVertexAttribArray(h.a_pos);
-  gl.vertexAttribPointer(h.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+/* ---------- 팔레트 ---------- */
+/* 밝고 생명력 있는 판타지 자연 — 연한 하늘~라벤더, 따뜻한 지평선 */
+const SKY = {
+  top:  [0.46, 0.52, 0.86],   // 연한 청보라 (위)
+  bot:  [0.98, 0.85, 0.83],   // 따뜻한 살구빛 (지평선 근처)
+  haze: [0.76, 0.74, 0.92],   // 먼 산 대기
+  fog:  [0.91, 0.94, 0.99],   // 아래쪽 안개
+  sun:  [1.00, 0.94, 0.78]
+};
+
+function drawShaderBackground(t, horizon, scrollX, wind){
+  if(!glReady) return;
+  gl.useProgram(shader.prog);
+  gl.uniform2f(shader.res, bgCanvas.width, bgCanvas.height);
+  gl.uniform1f(shader.time, t);
+  gl.uniform1f(shader.horizon, clamp(horizon, 0.22, 0.62));
+  gl.uniform1f(shader.scroll, scrollX);
+  gl.uniform3fv(shader.skyTop, SKY.top);
+  gl.uniform3fv(shader.skyBot, SKY.bot);
+  gl.uniform3fv(shader.haze, SKY.haze);
+  gl.uniform3fv(shader.fog, SKY.fog);
+  gl.uniform3fv(shader.sun, SKY.sun);
+  gl.uniform1f(shader.sunI, 1.0);
+  gl.uniform1f(shader.wind, wind);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-// ---------- 치프 색상 팔레트 (셰이더 유니폼용 + 캔버스용) ----------
-const PALETTE = {
-  sky:    { r:0.30, g:0.20, b:0.42, a:1.0 },   // 진한 보랏 하늘 (위)
-  skyBot: { r:0.55, g:0.42, b:0.66, a:1.0 },   // 연한 보라 (아래)
-  haze:   { r:0.58, g:0.54, b:0.78, a:1.0 },   // 먼 산 (보라-푸른)
-  fog:    { r:0.80, g:0.84, b:0.94, a:1.0 },   // 밝은 안개
-  sun:    { x:0.0, y:0.0, z:1.0, w:1.0 },       // 태양: dir 미사용, 색+강도
-  sunCol: [0.98, 0.85, 0.55],
-  ground:{ r:0.16, g:0.22, b:0.18, a:1.0 },
-  platform:{ r:0.24, g:0.32, b:0.25, a:1.0 },
-  platformEdge:{ r:0.48, g:0.60, b:0.50, a:1.0 },
-  glow:   { r:0.56, g:0.91, b:0.79, a:1.0 },
-  seed:   { r:0.96, g:0.84, b:0.43, a:1.0 },
-  player: { r:0.86, g:0.55, b:0.30, a:1.0 },   // 따뜻한 주황빛 캐릭터
-};
+/* ============================================================
+   물리 상수 — 지형 생성이 이 값들로 "도달 가능"을 계산한다
+   ============================================================ */
+const G          = 0.62;    // 중력 (px/step²)
+const JUMP_V     = -12.4;   // 점프 초기 속도
+const JUMP_CUT   = -4.2;    // 키를 떼면 상승 속도를 여기까지 깎음 (변수 점프)
+const APEX       = (JUMP_V * JUMP_V) / (2 * G);   // ≈ 124px
+const AIRTIME    = (2 * Math.abs(JUMP_V)) / G;    // ≈ 40 step
+const SPEED_MIN  = 4.2;
+const SPEED_MAX  = 9.2;
+const RAMP_DIST  = 16000;   // 이 거리에서 최고 속도
+const COYOTE     = 7;       // 발판을 떠난 뒤에도 점프 허용 (step)
+const BUFFER     = 8;       // 착지 직전 입력 기억 (step)
+const METER      = 22;      // 1m = 22px
+const LEDGE_GRAB_X = 14;    // 모서리 걸치기 허용 폭
+const LEDGE_GRAB_Y = 22;    // 모서리 걸치기 허용 높이
+const JUMP_LEAD  = 34;      // 사람이 모서리보다 이만큼 일찍 뛴다고 보고 지형을 만든다
+const LAND_ROOM  = 26;      // 착지 여유
+const SPIKE_ROOM = 60;      // 입구 가시를 함께 넘기 위한 추가 여유
 
-// 태양 색 (셰이더에 전달하는 vec3)
-const sunColor = PALETTE.sunCol.slice();
+/* 속도는 "거리의 함수" — 그래야 지형 난이도가 시드만으로 재현된다 */
+const speedAt = (x) => lerp(SPEED_MIN, SPEED_MAX, clamp(x / RAMP_DIST, 0, 1));
 
-// ---------- 게임 상태 ----------
-const STATE = { START:0, INTRO:1, RUNNING:2, DEAD:3, RESULT:4 };
-let state = STATE.START;
-let gameTime = 0;         //전체 시간
-let runTime = 0;          //런 진행 시간
-let simTime = 0;          // 물리/렌더용
-let seed = 0;
-let rng = mulberry32(seed);
-let bestScore = 0;
-let scoreRun = 0;         // 이번 런 총점 (거리+수집)
-let distance = 0;         // 단위 미터
-let seedsCollected = 0;
-
-// ---------- 카메라 ----------
-const camera = { x:0, y:0, targetX:0, targetY:0, v:0 };
-
-// ---------- 플레이어 ----------
-const player = {
-  x: 0, y: 0, vy: 0, w: 18, h: 34,
-  onGround: false, jumpHeld: false, jumpStart: 0,
-  steer: 0, // -1..1 좌우 입력
-  facing: 1,
-  runFrame: 0, runTimer: 0,
-  bounceT: 0, // 착지 바운스
-  alive: true,
-  baseY: 0
-};
-
-// ---------- 물리/ 월드 ----------
-const WORLD = {
-  gravity: 0.55,           // px/frame^2 (게임을 px 단위로 구성)
-  jumpSpeed: -11.2,
-  runSpeedBase: 3.5,      // 초기 속도
-  runSpeedMax: 8.2,
-  speedAccel: 0.00055,     // 시간 따른 가속
-  moveSpeed: 4.2,          // 좌우 이동
-  groundY: 0,             // 현재 화면 기준 땅 높이 (카메라 따라 이동)
-  segments: [],           // 활성 지형 세그먼트
-  seeds: [],              // 활성 수집물
-  particles: [],          // 파티클 풀
-  segWidth: 120,          // 한 세그먼트 너비
-  segH: 900,              // 세그먼트 높이(풀)
-  ahead: 8,               // 미리 생성
-  behind: 3,              // 뒤에서 정리
-};
-
-// ---------- 파티클 ----------
-function makeParticle(x,y,vx,vy,life,color,size,glide){
-  return { x,y,vx,vy,life,maxLife:life,color,size,glide:glide||0, alive:true };
-}
-function emitBurst(x,y,n,color,size,up){
-  for(let i=0;i<n;i++){
-    const ang = Math.PI*0.5 + rand(-1.2, 1.2);
-    const sp = rand(1.5, 4.5);
-    WORLD.particles.push(makeParticle(
-      x + rand(-3,3), y + rand(-2,2),
-      Math.cos(ang)*sp*(up?1.4:1), up ? rand(-5,-2) : rand(-1.5, 1.5),
-      rand(28,50), color, rand(size*0.7, size*1.3), 0
-    ));
-  }
-}
-function emitTrail(x,y,color,n){
-  for(let i=0;i<n;i++){
-    WORLD.particles.push(makeParticle(
-      x + rand(-2,2), y + rand(-2,2),
-      rand(-0.6,0.6), rand(-1.0,-0.2),
-      rand(14,26), color, rand(2.2,4.5), 1
-    ));
-  }
+/* 낙차 dy(양수=내려감)일 때 점프로 도달 가능한 수평 거리 */
+function reachFor(speed, dy){
+  const disc = JUMP_V * JUMP_V + 2 * G * dy;
+  if(disc <= 0) return 0;
+  return speed * (Math.abs(JUMP_V) + Math.sqrt(disc)) / G;
 }
 
-// ---------- 지형 생성 (procedural) ----------
-function makeSegment(startX, rngFn){
-  // 세그먼트는 평평한 땅 위/아래로 플랫폼이 튀어나오는 구조
-  const seg = { startX, platforms:[], hazards:[], yBase: WORLD.groundY };
-  const count = Math.floor(rngFn()*5) + 2; // 2~6개 플랫폼
-  let x = startX;
-  for(let i=0;i<count;i++){
-    const pw = rand(40, 120);
-    const ph = rand(36, 90); // 플랫폼 높이
-    const px = x + rand(20, 90);
-    const py = WORLD.groundY - rand(40, 180); // 땅에서 위로 뜬 높이
-    const kind = rngFn() < 0.6 ? 'o' : 'f'; // 평범한 / 좁은 발판
-    seg.platforms.push({ x:px, y:py, w:pw, h:ph, kind });
-    x += rand(50, 140);
+/* ============================================================
+   월드 — 절벽(chunk) 사슬 + 공중 발판 + 씨앗 + 가시
+   기준: 월드 y=0 이 첫 지면. y가 작을수록 높다.
+   ============================================================ */
+const world = {
+  chunks: [],
+  particles: [],
+  motes: [],
+  nextIndex: 0,
+  cursorX: 0,
+  prevTop: 0
+};
+
+function makeChunk(){
+  const i = world.nextIndex++;
+  let x, w, top, wantSpike = false;
+
+  if(i === 0){
+    x = -1600; w = 2260; top = 0;                      // 화면 밖까지 이어지는 출발 지면
+  }else{
+    const prev = world.chunks[world.chunks.length - 1];
+    const prevEnd = prev.x + prev.w;
+    const prevTop = prev.top;
+    const s = speedAt(prevEnd);
+    const fast = clamp((s - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1);
+
+    // 오르막 상한은 속도에 비례 — 느릴 땐 완만하게, 빨라질수록 과감하게
+    const maxRise = lerp(26, 78, fast);
+    let dy = rnd(-1, 1);
+    dy = dy < 0 ? dy * maxRise : dy * lerp(70, 130, fast);
+    top = clamp(prevTop + dy, -280, 130);
+    if(prevTop - top > maxRise) top = prevTop - maxRise;
+    const drop = top - prevTop;                          // +면 내려감
+
+    // 가시는 착지 지점 뒤가 아니라 "틈 바로 건너편"에 둔다 —
+    // 틈과 가시를 한 번의 점프로 함께 넘게 해서, 공중에서 손쓸 수 없는 죽음을 없앤다.
+    wantSpike = rng() < 0.45;
+
+    // 간격: 실제 점프 포물선에서 "일찍 뜀 + 착지 여유 + 가시 폭"을 뺀 거리 안쪽
+    const reach = reachFor(s, drop);
+    const usable = reach - JUMP_LEAD - LAND_ROOM - (wantSpike ? SPIKE_ROOM : 0);
+    const gapMax = clamp(usable * 0.74, 56, 320);
+    const gapMin = Math.min(58, gapMax * 0.62);
+    const gap = rnd(gapMin, gapMax);
+    x = prevEnd + gap;
+    // 발판 길이는 "끝까지 누른 최대 점프"도 이 발판 안에 떨어지도록 보장한다.
+    // (짧게 눌러 일찍 내려앉을 수도, 끝까지 눌러 멀리 갈 수도 있게)
+    w = clamp(Math.max(rnd(170, 430), reach - gap + LAND_ROOM * 2), 170, 940);
+    if(wantSpike && w < 210) wantSpike = false;
   }
-  // 장애물(덩굴·나뭇가지): 하단에서 올라오는 것
-  const hzCount = Math.floor(rngFn()*3)+1;
-  for(let i=0;i<hzCount;i++){
-    const hx = startX + rand(40, 220);
-    const hh = rand(40, 120);
-    seg.hazards.push({ x:hx, y:WORLD.groundY - hh, w:rand(10,22), h:hh, kind:'spike' });
+
+  const c = { x, w, top, spikes: [], plats: [], seeds: [], vines: [], flowers: [],
+              depth: rnd(150, 260), tail: [], rocks: [] };
+
+  // 떠 있는 섬의 아랫면 — 가운데가 깊고 양끝으로 얕아지는 뿌리 덩어리
+  const tn = Math.max(4, Math.round(c.w / 110));
+  for(let k = 0; k <= tn; k++){
+    const tt = k / tn;
+    const base = 0.22 + 0.78 * Math.pow(Math.sin(Math.PI * tt), 0.75);
+    c.tail.push({ t: tt, d: base * rnd(0.78, 1.12) });
   }
-  return seg;
+  const rn = Math.round(c.w / 90);
+  for(let k = 0; k < rn; k++){
+    c.rocks.push({ t: rnd(0.05, 0.95), d: rnd(0.12, 0.62), r: rnd(3, 9) });
+  }
+
+  if(i > 0){
+    // 가시덤불: 틈 건너편 입구 — 틈과 함께 한 번에 넘는 하나의 장애물
+    if(wantSpike){
+      c.spikes.push({ x: c.x + 14, w: rnd(15, 22), h: rnd(20, 32) });
+    }
+    // 공중 발판 (보너스 루트) — 점프 정점 안쪽에 두되,
+    // 발판에서 떨어져도 반드시 같은 절벽 위에 착지하도록 여유를 확보한다.
+    if(rng() < 0.42){
+      const pw = rnd(64, 122);
+      const ph = rnd(78, Math.min(150, APEX - 8));
+      const px = c.x + rnd(10, Math.max(20, c.w * 0.5));
+      const runout = speedAt(c.x) * Math.sqrt(2 * ph / G);   // 낙하 중 전진 거리
+      if(px + pw + runout < c.x + c.w - 20){
+        const py = c.top - ph;
+        c.plats.push({ x: px, y: py, w: pw, h: 14 });
+        if(rng() < 0.8) c.seeds.push(mkSeed(px + pw / 2, py - 20));
+      }
+    }
+    // 지면 위 씨앗
+    const gs = rndInt(0, 2);
+    for(let k = 0; k < gs; k++){
+      c.seeds.push(mkSeed(c.x + rnd(30, Math.max(40, c.w - 30)), c.top - rnd(26, 60)));
+    }
+    // 틈 위로 그려지는 씨앗 아치 — "여기로 뛰어" 라는 시각적 안내
+    const prev = world.chunks[world.chunks.length - 1];
+    const gap = c.x - (prev.x + prev.w);
+    if(gap > 120 && rng() < 0.7){
+      const n = 3;
+      for(let k = 0; k < n; k++){
+        const t = (k + 1) / (n + 1);
+        const gx = lerp(prev.x + prev.w, c.x, t);
+        const arc = Math.sin(t * Math.PI) * 62;
+        c.seeds.push(mkSeed(gx, lerp(prev.top, c.top, t) - 34 - arc));
+      }
+    }
+  }
+
+  // 절벽 장식: 늘어진 덩굴 / 빛나는 꽃
+  const vn = rndInt(1, 3);
+  for(let k = 0; k < vn; k++){
+    c.vines.push({ x: c.x + rnd(6, Math.max(8, c.w - 6)), len: rnd(28, 90), ph: rnd(0, 6.28) });
+  }
+  const fn = rndInt(0, 3);
+  for(let k = 0; k < fn; k++){
+    c.flowers.push({ x: c.x + rnd(8, Math.max(10, c.w - 8)), ph: rnd(0, 6.28), hue: rng() < 0.5 ? 0 : 1 });
+  }
+
+  world.chunks.push(c);
+  return c;
+}
+
+function mkSeed(x, y){
+  return { x, y, r: 6.5, ph: rnd(0, 6.28), got: false, pop: 0 };
 }
 
 function rebuildWorld(seedVal){
-  seed = seedVal;
-  rng = mulberry32(seed);
-  WORLD.segments = [];
-  WORLD.seeds = [];
-  WORLD.particles = [];
-  // 먼 초기 세그먼트를 채움
-  let x = 0;
-  for(let i=0;i<WORLD.ahead+3;i++){
-    WORLD.segments.push(makeSegment(x, rng));
-    x += WORLD.segWidth + rand(-20,20);
-  }
-  // 수집물(씨앗): 플레이어 시작 부근 뒤에 배치하지 않음, 적절히 전방에
-  placeSeeds();
-  camera.targetX = 0; camera.targetY = 0; camera.x = 0; camera.y = 0;
-}
-
-function placeSeeds(){
-  WORLD.seeds = [];
-  for(const seg of WORLD.segments){
-    // 각 세그먼트에 0~2개 씨앗
-    const n = Math.floor(rng()*3);
-    for(let i=0;i<n;i++){
-      const p = seg.platforms[Math.floor(rng()*seg.platforms.length)];
-      if(!p) continue;
-      const sx = p.x + rand(8, p.w-8);
-      const sy = p.y - rand(6, 18);
-      WORLD.seeds.push({ x:sx, y:sy, r:6, glow:0, collected:false, seed: rng()*Math.PI*2 });
-    }
+  rng = mulberry32(seedVal >>> 0);
+  world.chunks.length = 0;
+  world.particles.length = 0;
+  world.motes.length = 0;
+  world.nextIndex = 0;
+  while(world.chunks.length < 14) makeChunk();
+  // 배경 반딧불이
+  for(let i = 0; i < (reduceMotion ? 24 : 60); i++){
+    world.motes.push({
+      x: rnd(-600, 2600), y: rnd(-420, 160),
+      r: rnd(0.9, 2.4), ph: rnd(0, 6.28), sp: rnd(0.15, 0.5), depth: rnd(0.35, 0.9)
+    });
   }
 }
 
-// ---------- 지형/플레이어 충돌 ----------
-function groundAt(x){
-  // 현재 x에서 땅의 y 좌표를 추정: 가장 가까운 세그먼트의 플랫폼 위면 그 y, 아니면 groundY
-  let topY = WORLD.groundY;
-  for(const seg of WORLD.segments){
-    if(x < seg.startX || x > seg.startX + WORLD.segWidth) continue;
-    for(const p of seg.platforms){
-      if(x >= p.x && x <= p.x + p.w){
-        if(p.y + p.h < topY) topY = p.y + p.h;
-      }
-    }
+/* ---------- 파티클 ---------- */
+const MAX_PARTICLES = reduceMotion ? 140 : 460;
+const PSCALE = reduceMotion ? 0.35 : 1;
+
+function spawn(x, y, vx, vy, life, rgb, size, grav){
+  if(world.particles.length >= MAX_PARTICLES) world.particles.shift();
+  world.particles.push({ x, y, vx, vy, life, max: life, rgb, size, grav });
+}
+function burst(x, y, n, rgb, size, upward){
+  n = Math.max(1, Math.round(n * PSCALE));
+  for(let i = 0; i < n; i++){
+    const a = upward ? (-Math.PI / 2 + rnd(-1.1, 1.1)) : rnd(0, Math.PI * 2);
+    const sp = rnd(1.2, upward ? 4.6 : 3.2);
+    spawn(x + rnd(-3, 3), y + rnd(-3, 3),
+          Math.cos(a) * sp, Math.sin(a) * sp - (upward ? 1.2 : 0),
+          rnd(24, 52), rgb, rnd(size * 0.6, size * 1.3), 0.055);
   }
-  return topY;
+}
+function dust(x, y, n, rgb){
+  n = Math.max(1, Math.round(n * PSCALE));
+  for(let i = 0; i < n; i++){
+    spawn(x + rnd(-4, 4), y + rnd(-2, 2), rnd(-1.4, -0.2), rnd(-1.0, -0.1),
+          rnd(16, 30), rgb, rnd(1.8, 4.2), 0.012);
+  }
 }
 
-function collider(a, b){
-  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
-}
+const C_DUST  = [176, 196, 168];
+const C_GLOW  = [143, 233, 201];
+const C_SEED  = [255, 216, 110];
+const C_CRASH = [232, 112, 122];
 
-// ---------- 오디오 (절차적) ----------
-let audioCtx = null;
-let masterGain = null;
-let kickGain = null; // 발소리
-let seedGain = null; // 수집 차임
-let padGain = null;  // 배경 패드
-let padOscs = [];
-let padActive = false;
+/* ============================================================
+   플레이어 — x는 중심, y는 발밑
+   ============================================================ */
+const player = {
+  x: 0, y: 0, vy: 0,
+  hw: 8, h: 32,
+  onGround: true, coyote: 0, buffer: 0, jumping: false,
+  steer: 0, facing: 1, runPhase: 0, squash: 0, alive: true
+};
+
+/* ---------- 카메라 ---------- */
+const camera = { x: 0, y: 0, groundRef: 0, shake: 0 };
+
+/* ---------- 상태 ---------- */
+const S = { START: 0, INTRO: 1, RUN: 2, DEAD: 3, RESULT: 4, PAUSE: 5 };
+let state = S.START;
+let seed = 0;
+let best = 0;
+let startX = 0;
+let distance = 0, seeds = 0;
+let frame = 0, runFrames = 0;
+let introUntil = 0;
+let deathCause = '';
+let hintTimer = null;
+let prevState = S.RUN;
+let flash = 0;
+
+/* ============================================================
+   오디오 (절차적)
+   ============================================================ */
+let actx = null, master = null, padGain = null, sfxGain = null;
+let muted = false;
+let padTimer = null;
 
 function initAudio(){
-  if(audioCtx) return;
+  if(actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return;
   try{
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain(); masterGain.gain.value = 0.55; masterGain.connect(audioCtx.destination);
-    kickGain = audioCtx.createGain(); kickGain.gain.value = 0.0; kickGain.connect(masterGain);
-    seedGain = audioCtx.createGain(); seedGain.gain.value = 0.0; seedGain.connect(masterGain);
-    padGain = audioCtx.createGain(); padGain.gain.value = 0.0; padGain.connect(masterGain);
-    // 패드 오실레이터 3개 (느린 코드)
-    const baseFreq = 72;
-    for(let i=0;i<3;i++){
-      const o = audioCtx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = baseFreq + i*10 + (i===1?3:0);
-      const g = audioCtx.createGain();
-      g.gain.value = i===1 ? 0.10 : 0.06;
-      o.connect(g); g.connect(padGain);
-      o.start();
-      padOscs.push(o);
-    }
-    padActive = true;
-    // 패드 페이드는 2초 걸쳐서
-    padGain.gain.setValueAtTime(0, audioCtx.currentTime);
-    padGain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 2.2);
-  }catch(e){ /* 오디오 미지원 환경 조용히 */ }
+    actx = new AC();
+    master = actx.createGain(); master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+    sfxGain = actx.createGain(); sfxGain.gain.value = 0.9; sfxGain.connect(master);
+    padGain = actx.createGain(); padGain.gain.value = 0; padGain.connect(master);
+    startPad();
+  }catch(e){ actx = null; }
 }
 
-function sfxFoot(ratio){
-  // ratio: 0..1 현재 속도 비율 — 피치 상승
-  if(!audioCtx) return;
-  const iface = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  iface.type = 'triangle';
-  const base = 120 + ratio*220; // 빠를수록 높음
-  iface.frequency.setValueAtTime(base, audioCtx.currentTime);
-  iface.frequency.exponentialRampToValueAtTime(base*0.5, audioCtx.currentTime+0.08);
-  g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(0.10*ratio, audioCtx.currentTime+0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.09);
-  iface.connect(g); g.connect(kickGain);
-  iface.start(); iface.stop(audioCtx.currentTime+0.1);
+/* 느리게 순환하는 배경 패드 — 4화음을 8초마다 옮긴다 */
+const PAD_CHORDS = [[110, 164.8, 220], [98, 146.8, 196], [123.5, 185, 246.9], [87.3, 130.8, 174.6]];
+let padVoices = [];
+function startPad(){
+  if(!actx) return;
+  const t = actx.currentTime;
+  for(let i = 0; i < 3; i++){
+    const o = actx.createOscillator();
+    o.type = i === 2 ? 'triangle' : 'sine';
+    o.frequency.value = PAD_CHORDS[0][i];
+    const g = actx.createGain();
+    g.gain.value = i === 0 ? 0.10 : 0.055;
+    const lfo = actx.createOscillator();
+    lfo.type = 'sine'; lfo.frequency.value = 0.08 + i * 0.03;
+    const lg = actx.createGain(); lg.gain.value = 1.6;
+    lfo.connect(lg); lg.connect(o.detune);
+    o.connect(g); g.connect(padGain);
+    o.start(t); lfo.start(t);
+    padVoices.push(o);
+  }
+  padGain.gain.setValueAtTime(0.0001, t);
+  padGain.gain.linearRampToValueAtTime(0.16, t + 3.0);
+  let ci = 0;
+  padTimer = setInterval(() => {
+    if(!actx) return;
+    ci = (ci + 1) % PAD_CHORDS.length;
+    const now = actx.currentTime;
+    padVoices.forEach((o, i) => o.frequency.linearRampToValueAtTime(PAD_CHORDS[ci][i], now + 2.4));
+  }, 8000);
 }
-function sfxSeed(){
-  if(!audioCtx) return;
-  const iface = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  iface.type = 'sine';
-  iface.frequency.setValueAtTime(780, audioCtx.currentTime);
-  iface.frequency.exponentialRampToValueAtTime(1560, audioCtx.currentTime+0.08);
-  g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(0.16, audioCtx.currentTime+0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.35);
-  iface.connect(g); g.connect(seedGain);
-  iface.start(); iface.stop(audioCtx.currentTime+0.4);
-  // 살짝 아래 화음
-  const iface2 = audioCtx.createOscillator();
-  const g2 = audioCtx.createGain();
-  iface2.type='sine'; iface2.frequency.value=440;
-  g2.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g2.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime+0.01);
-  g2.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.4);
-  iface2.connect(g2); g2.connect(seedGain);
-  iface2.start(); iface2.stop(audioCtx.currentTime+0.45);
+
+function tone(type, f0, f1, dur, vol, dest){
+  if(!actx || muted) return;
+  const t = actx.currentTime;
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  if(f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(dest || sfxGain);
+  o.start(t); o.stop(t + dur + 0.02);
 }
-function sfxLand(){
-  if(!audioCtx) return;
-  const iface = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  iface.type='triangle'; iface.frequency.value=180;
-  g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(0.09, audioCtx.currentTime+0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.12);
-  iface.connect(g); g.connect(kickGain);
-  iface.start(); iface.stop(audioCtx.currentTime+0.15);
+
+function sfxFoot(ratio){ tone('triangle', 130 + ratio * 180, 70 + ratio * 90, 0.075, 0.05 + ratio * 0.05); }
+function sfxJump(){ tone('triangle', 220, 470, 0.16, 0.10); }
+function sfxLand(){ tone('triangle', 190, 90, 0.13, 0.11); }
+function sfxSeed(n){
+  const scale = [784, 880, 988, 1175, 1319];
+  const f = scale[n % scale.length];
+  tone('sine', f, f * 1.5, 0.30, 0.14);
+  tone('sine', f / 2, f / 2, 0.42, 0.06);
 }
 function sfxCrash(){
-  if(!audioCtx) return;
-  const iface = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  iface.type='sawtooth'; iface.frequency.value=110;
-  iface.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime+0.4);
-  g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(0.22, audioCtx.currentTime+0.02);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.5);
-  iface.connect(g); g.connect(masterGain);
-  iface.start(); iface.stop(audioCtx.currentTime+0.6);
+  tone('sawtooth', 150, 42, 0.55, 0.18);
+  tone('square', 90, 30, 0.40, 0.08);
+}
+function setMuted(v){
+  muted = v;
+  try{ localStorage.setItem('luminarun_muted', v ? '1' : '0'); }catch(e){}
+  if(master && actx) master.gain.setTargetAtTime(v ? 0 : 0.5, actx.currentTime, 0.05);
+  const b = $('muteBtn');
+  b.textContent = v ? '♪ 소리 끔' : '♪ 소리 켬';
+  b.setAttribute('aria-pressed', v ? 'true' : 'false');
 }
 
-// ---------- 점수 집계 ----------
-function runScore(){
-  return Math.floor(distance) + seedsCollected*40;
+/* ============================================================
+   시뮬레이션 (고정 스텝 60Hz)
+   ============================================================ */
+function chunkAtX(x){
+  for(let i = 0; i < world.chunks.length; i++){
+    const c = world.chunks[i];
+    if(x >= c.x && x <= c.x + c.w) return c;
+  }
+  return null;
 }
 
-// ---------- 게임 갱신 ----------
-function update(){
-  simTime += 1;
-  if(state === STATE.RUNNING){
-    runTime += 1;
-    gameTime += 1;
-    // 속도 상승 (시간 기반)
-    const speed = lerp(WORLD.runSpeedBase, WORLD.runSpeedMax, clamp(runTime*WORLD.speedAccel, 0, 1));
-    distance += speed * 0.06;
+function land(surfaceY){
+  const impact = player.vy;
+  player.y = surfaceY;
+  player.vy = 0;
+  if(!player.onGround){
+    player.onGround = true;
+    player.jumping = false;
+    if(impact > 4){
+      player.squash = 1;
+      dust(player.x, player.y, 7, C_DUST);
+      sfxLand();
+      if(!reduceMotion) camera.shake = Math.min(5, impact * 0.35);
+    }
+  }
+  player.onGround = true;
+}
 
-    // 플레이어 수평: 자동 전진. steer는 좌우로 약간 offset
-    const targetX = player.x + speed + player.steer*WORLD.moveSpeed*0.06;
-    player.x = targetX;
-    // 변수 점프
-    const jumpRequested = player.jumpHeld;
-    if(jumpRequested && !player.onGround){
-      // 공중에서 누르고 있으면 살짝 더 상승 (변수 점프)
-      if(player.vy < -1 && player.jumpStart > 0){
-        const elapsed = simTime - player.jumpStart;
-        if(elapsed < 8){ // 초기 구간만 추가 상승
-          player.vy += -0.06;
-        }
+function doJump(){
+  player.vy = JUMP_V;
+  player.onGround = false;
+  player.jumping = true;
+  player.coyote = 0;
+  player.buffer = 0;
+  player.squash = -1;
+  dust(player.x, player.y, 6, C_GLOW);
+  sfxJump();
+}
+
+function step(){
+  frame++;
+  if(state !== S.RUN) return;
+  runFrames++;
+
+  const wasOnGround = player.onGround;
+  const prevFeet = player.y;
+  const prevX = player.x;
+
+  /* --- 입력: 점프 버퍼 + 코요테 타임 --- */
+  if(player.buffer > 0) player.buffer--;
+  if(wasOnGround) player.coyote = COYOTE;
+  else if(player.coyote > 0) player.coyote--;
+  if(player.buffer > 0 && player.coyote > 0) doJump();
+  // 변수 점프: 떼면 상승을 깎는다
+  if(player.jumping && !input.jumpHeld && player.vy < JUMP_CUT) player.vy = JUMP_CUT;
+
+  /* --- 수평: 자동 전진 + 좌우 감속/가속 --- */
+  const base = speedAt(player.x);
+  const target = clamp(input.steer, -1, 1);
+  player.steer = lerp(player.steer, target, 0.18);
+  const vx = base * (1 + player.steer * 0.24);
+  player.x += vx;
+  if(Math.abs(player.steer) > 0.25) player.facing = player.steer > 0 ? 1 : -1;
+  else player.facing = 1;
+
+  /* --- 수직 --- */
+  player.vy = Math.min(player.vy + G, 22);
+  player.y += player.vy;
+
+  /* --- 충돌 ---
+     발밑 궤적을 선분으로 보고 윗면을 통과했는지 판정한다(스윕).
+     한 스텝에 최대 22px 움직이므로, 이동 후 좌표만 보면 모서리에서 바닥을 관통한다. */
+  player.onGround = false;
+  let crashed = false;
+  const dyStep = player.y - prevFeet;
+
+  const surfaceHit = (top, sxEdge, exEdge) => {
+    if(player.vy < 0) return false;
+    if(prevFeet > top + 1.5 || player.y < top) return false;
+    const t = dyStep > 0.0001 ? clamp((top - prevFeet) / dyStep, 0, 1) : 0;
+    const cx = prevX + (player.x - prevX) * t;
+    return cx >= sxEdge - 1 && cx <= exEdge + 1;
+  };
+
+  for(let i = 0; i < world.chunks.length; i++){
+    const c = world.chunks[i];
+    if(c.x + c.w < player.x - 200 || c.x > player.x + 200) continue;
+
+    const insideX = player.x > c.x && player.x < c.x + c.w;
+
+    // 절벽 윗면
+    if(surfaceHit(c.top, c.x, c.x + c.w)){
+      land(c.top);
+    }
+    // 모서리 걸치기 — 아슬아슬하게 닿으면 끌어올려 준다 (공정하게 어려운)
+    else if(!player.onGround && player.vy > 0 &&
+            player.x <= c.x && player.x + player.hw + LEDGE_GRAB_X > c.x &&
+            player.y > c.top && player.y < c.top + LEDGE_GRAB_Y){
+      player.x = c.x + 1.5;
+      land(c.top);
+      dust(player.x, player.y, 4, C_DUST);
+    }
+    // 절벽 벽면에 파묻힘 = 틈을 못 넘고 부딪힘
+    if(!player.onGround && insideX && player.y > c.top + LEDGE_GRAB_Y){
+      crashed = true; break;
+    }
+    // 공중 발판 (윗면 한 방향)
+    for(let k = 0; k < c.plats.length; k++){
+      const p = c.plats[k];
+      if(surfaceHit(p.y, p.x, p.x + p.w)) land(p.y);
+    }
+    // 가시
+    for(let k = 0; k < c.spikes.length; k++){
+      const s = c.spikes[k];
+      if(player.x + player.hw > s.x && player.x - player.hw < s.x + s.w &&
+         player.y > c.top - s.h && player.y - player.h < c.top){
+        crashed = true; break;
       }
     }
-    if(jumpRequested && player.onGround && !player._jumpConsumed){
-      player.vy = WORLD.jumpSpeed;
-      player.onGround = false;
-      player.jumpStart = simTime;
-      player._jumpConsumed = true;
-      player.bounceT = 1;
-      emitBurst(player.x, player.y+player.h/2, 8, PALETTE.glow, 3.2, false);
-      sfxFoot(0.4);
-    }
-    if(!jumpRequested){ player._jumpConsumed = false; }
+    if(crashed) break;
+  }
 
-    // 중력
-    player.vy += WORLD.gravity;
-    player.y += player.vy;
+  if(crashed){ die('crash'); return; }
 
-    // 좌우 이동 (플레이어 중심을 기준으로 약간의 이동만)
-    const move = player.steer * WORLD.moveSpeed * 0.18;
-    player.x += move;
-    player.facing = player.steer > 0 ? 1 : (player.steer < 0 ? -1 : player.facing);
-    if(Math.abs(player.steer) < 0.05) player.steer *= 0.85; else player.steer *= 0.92;
-
-    // 땅 충돌
-    const groundY = groundAt(player.x);
-    const feet = player.y + player.h;
-    if(feet > groundY && player.vy > 0){
-      player.y = groundY - player.h;
-      if(player.vy > 4){
-        player.bounceT = 1;
-        emitBurst(player.x, groundY, 6, PALETTE.ground, 2.0, false);
-        sfxLand();
-      }
-      player.vy = 0;
-      player.onGround = true;
-    } else {
-      // 공중이면 땅에 안 닿음 (이미 위에서 처리)
-      if(feet <= groundY + 0.1 && player.vy >= 0) player.onGround = true;
-      else player.onGround = false;
-    }
-
-    // 카메라: 플레이어 추종 + 부드럽게
-    const targetCX = player.x - W*0.32;
-    const targetCY = groundY - H*0.55;
-    camera.targetX = targetCX;
-    camera.targetY = targetCY;
-    camera.x = lerp(camera.x, camera.targetX, 0.10);
-    camera.y = lerp(camera.y, camera.targetY, 0.09);
-
-    // 플레이어 세계 좌표 기준 Y 보정
-    player.baseY = groundY;
-
-    // 파티클 갱신
-    for(const p of WORLD.particles){
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.04;
-      if(p.glide) p.vx *= 0.96;
-      p.life--;
-      if(p.life<=0) p.alive = false;
-    }
-    WORLD.particles = WORLD.particles.filter(p=>p.alive);
-
-    // 수집물 충돌
-    for(const s of WORLD.seeds){
-      if(s.collected) continue;
+  /* --- 씨앗 --- */
+  for(let i = 0; i < world.chunks.length; i++){
+    const c = world.chunks[i];
+    if(c.x + c.w < player.x - 600 || c.x > player.x + 600) continue;
+    for(let k = 0; k < c.seeds.length; k++){
+      const s = c.seeds[k];
+      if(s.got){ if(s.pop < 1) s.pop += 0.08; continue; }
       const dx = player.x - s.x;
-      const dy = (player.y + player.h/2) - s.y;
-      if(dx*dx + dy*dy < (s.r+10)*(s.r+10)){
-        s.collected = true;
-        seedsCollected++;
-        sfxSeed();
-        emitBurst(s.x, s.y, 18, PALETTE.seed, 5.0, true);
-        emitBurst(s.x, s.y, 6, PALETTE.glow, 3.2, true);
-      }
-      s.glow = Math.sin(runTime*0.06 + s.seed) * 0.25 + 0.75;
-    }
-
-    // 세그먼트를 앞/뒤로 유지
-    const viewX = camera.x + W;
-    const farAhead = viewX + W*2.5;
-    const farBehind = camera.x - W*1.5;
-    // 새 세그먼트 추가
-    let lastX = WORLD.segments.length ? WORLD.segments[WORLD.segments.length-1].startX + WORLD.segWidth + rand(-20,20) : 0;
-    while(lastX < farAhead){
-      WORLD.segments.push(makeSegment(lastX, rng));
-      lastX += WORLD.segWidth + rand(-20,20);
-    }
-    // 오래된 세그먼트 정리
-    WORLD.segments = WORLD.segments.filter(seg => seg.startX + WORLD.segWidth > farBehind);
-    // 수집물도 화면 밖으로 나간 것 정리
-    WORLD.seeds = WORLD.seeds.filter(s => s.x > farBehind - 40 && !s.collected);
-
-    // 장애물 충돌 판정 (머리가 닿으면 사망)
-    const headX = player.x + player.w/2;
-    const headY = player.y;
-    for(const seg of WORLD.segments){
-      for(const hz of seg.hazards){
-        if(headX > hz.x && headX < hz.x+hz.w && headY < hz.y + hz.h && headY + player.h > hz.y){
-          die();
-          return;
-        }
-      }
-      // 플랫폼 아래 바닥으로 떨어지는 것: 지형 밖으로 떨어지면 사망
-      // 플레이어가 땅보다 훨씬 아래로 떨어지면 사망
-      if(player.y > groundY + 80){
-        die();
-        return;
+      const dy = (player.y - player.h * 0.5) - s.y;
+      if(dx * dx + dy * dy < 620){
+        s.got = true;
+        seeds++;
+        sfxSeed(seeds);
+        burst(s.x, s.y, 16, C_SEED, 4.4, true);
+        burst(s.x, s.y, 6, C_GLOW, 3.0, true);
+        $('seedCount').textContent = seeds;
       }
     }
-
-    // 점수 갱신
-    scoreRun = runScore();
-    $('dist').textContent = Math.floor(distance);
-    $('seedCount').textContent = seedsCollected;
   }
+
+  /* --- 달리기 먼지 & 발소리 --- */
+  if(player.onGround){
+    player.runPhase += 0.20 + (base - SPEED_MIN) * 0.02;
+    const ratio = clamp((base - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1);
+    const period = Math.round(lerp(15, 8, ratio));
+    if(runFrames % period === 0){
+      sfxFoot(ratio);
+      dust(player.x - player.facing * 6, player.y, 2, C_DUST);
+    }
+  }
+
+  /* --- 낙사 --- */
+  if(player.y - camera.y > VH + 90){ die('fall'); return; }
+
+  /* --- 월드 스트리밍 --- */
+  const last = world.chunks[world.chunks.length - 1];
+  if(last.x + last.w < player.x + VW * 1.6) makeChunk();
+  while(world.chunks.length > 2 && world.chunks[0].x + world.chunks[0].w < camera.x - 400){
+    world.chunks.shift();
+  }
+
+  /* --- 스코어 --- */
+  distance = Math.max(distance, (player.x - startX) / METER);
+  $('dist').textContent = Math.floor(distance);
 }
 
-function die(){
-  state = STATE.DEAD;
+function updateVisuals(dt){
+  // 프레임레이트가 달라도 같은 속도로 보이도록 스텝 비율로 환산
+  const k = clamp(dt / FIXED, 0.2, 3);
+
+  const ps = world.particles;
+  for(let i = ps.length - 1; i >= 0; i--){
+    const p = ps[i];
+    p.x += p.vx * k; p.y += p.vy * k;
+    p.vy += p.grav * k;
+    p.vx *= Math.pow(0.985, k);
+    p.life -= k;
+    if(p.life <= 0) ps.splice(i, 1);
+  }
+  // 스쿼시/스트레치 감쇠
+  player.squash *= Math.pow(0.86, k);
+  if(Math.abs(player.squash) < 0.01) player.squash = 0;
+  camera.shake *= Math.pow(0.86, k);
+  flash *= Math.pow(0.90, k);
+
+  // 카메라 (프레임 독립 감쇠)
+  const ease = (rate) => 1 - Math.pow(1 - rate, k);
+  if(player.onGround) camera.groundRef = lerp(camera.groundRef, player.y, ease(0.22));
+  const anchor = Math.min(camera.groundRef, player.y + 150);
+  const tx = player.x - VW * 0.32;
+  const ty = anchor - VH * GROUND_FRAC;
+  camera.x = lerp(camera.x, tx, ease(state === S.RUN ? 0.14 : 0.06));
+  camera.y = lerp(camera.y, ty, ease(0.09));
+}
+
+function die(cause){
+  if(state !== S.RUN) return;
+  deathCause = cause;
+  state = S.DEAD;
   player.alive = false;
+  clearTimeout(hintTimer);
+  $('hint').classList.remove('fade');
   sfxCrash();
-  emitBurst(player.x, player.y + player.h/2, 26, PALETTE.danger, 5.0, true);
-  emitBurst(player.x, player.y + player.h/2, 10, PALETTE.ground, 3.2, false);
-  // 결과 판정
-  const total = runScore();
-  let isNewBest = false;
-  if(total > bestScore){
-    bestScore = total;
-    try{ localStorage.setItem('luminarun_best', String(bestScore)); }catch(e){}
-    isNewBest = true;
+  if(!reduceMotion){
+    camera.shake = 9;
+    flash = 1;
   }
-  // 결과 표시까지 약간의 지연
-  setTimeout(()=>{
-    state = STATE.RESULT;
+  burst(player.x, player.y - player.h * 0.5, 26, C_CRASH, 4.6, true);
+  burst(player.x, player.y - player.h * 0.5, 12, C_DUST, 3.4, false);
+
+  const score = Math.floor(distance) + seeds * 40;
+  const isBest = score > best;
+  if(isBest){
+    best = score;
+    try{ localStorage.setItem('luminarun_best', String(best)); }catch(e){}
+    $('bestVal').textContent = best;
+  }
+  setTimeout(() => {
+    if(state !== S.DEAD) return;
+    state = S.RESULT;
     $('resultDist').textContent = Math.floor(distance);
-    $('resultSeeds').textContent = seedsCollected;
-    $('resultBest').textContent = bestScore;
-    $('resultNewRecord').textContent = isNewBest ? '★ NEW BEST' : '—';
+    $('resultSeeds').textContent = seeds;
+    $('resultScore').textContent = score;
+    $('resultBest').textContent = best;
     $('resultSeedVal').textContent = seed;
-    $('resultCard').classList.add('show');
-    $('resultTitle').textContent = isNewBest ? '빛의 파편' : '런 완료';
-  }, 520);
+    $('newBest').textContent = isBest ? '★ 새 기록' : '';
+    $('resultTitle').textContent = cause === 'fall' ? '빛 아래로 떨어졌다' : '빛의 파편이 흩어졌다';
+    $('live').textContent = `런 종료. 거리 ${Math.floor(distance)}미터, 씨앗 ${seeds}개, 점수 ${score}점.` +
+      (isBest ? ' 새 기록입니다.' : '');
+    show('resultVeil', true);
+    $('retryBtn').focus({ preventScroll:true });
+  }, 620);
 }
 
-// ---------- 렌더 (2D 캔버스) ----------
-function draw(){
-  // WebGL 배경 먼저
-  const skyBot = PALETTE.skyBot;
-  const skyTop = PALETTE.sky;
-  const haze = PALETTE.haze;
-  const fog = PALETTE.fog;
-  const sun = { x: sunColor[0], y: sunColor[1], z: sunColor[2], w: 1.05 };
-  const wind = { x: Math.sin(gameTime*0.003)*0.4+0.6, y:0 };
-  drawBackground(simTime*0.016, {r:skyTop.r,g:skyTop.g,b:skyTop.b,a:skyTop.a}, {r:skyBot.r,g:skyBot.g,b:skyBot.b,a:skyBot.a}, haze, fog, sun, wind);
-  // 2D 캔버스 리셋 (gl은 알파 꺼져있으니 합성 안전)
-  if(ctx2){ ctx2.setTransform(DPR,0,0,DPR,0,0); }
-  ctx2.clearRect(0,0,W,H);
+/* ============================================================
+   렌더 (2D 캔버스)
+   ============================================================ */
+function draw(now){
+  const t = now * 0.001;
+  const horizon = clamp(1 - (horizonY() * ZOOM) / H, 0.22, 0.62);
+  const wind = 0.6 + Math.sin(t * 0.21) * 0.35;
 
-  // 카메라 보정
-  ctx2.save();
-  ctx2.translate(-camera.x, -camera.y);
+  drawShaderBackground(t, horizon, camera.x * ZOOM, wind);
 
-  // ---------- 먼 산/구름 레이어 (2D 보조) ----------
-  // 셰이더와 겹치지만, 더 가까운 중간 거리의 구름 실루엣을 추가
-  drawDistantClouds();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
 
-  // ---------- 지면/지형 ----------
-  drawGround();
+  const sx = camera.shake > 0.05 ? (Math.random() - 0.5) * camera.shake : 0;
+  const sy = camera.shake > 0.05 ? (Math.random() - 0.5) * camera.shake : 0;
+  ctx.save();
+  ctx.translate(sx, sy);
 
-  // ---------- 플랫폼 ----------
-  for(const seg of WORLD.segments){
-    for(const p of seg.platforms){
-      drawPlatform(p);
+  if(!glReady) drawSkyFallback(horizon, t);
+
+  // 월드 레이어는 뷰 스케일 안에서 그린다 (좌표는 전부 월드 px)
+  ctx.save();
+  ctx.scale(ZOOM, ZOOM);
+
+  drawParallaxForest(horizon, t);
+  drawFloatingIsles(t);
+  drawMotes(t);
+
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  drawChunks(t);
+  drawSeeds(t);
+  drawParticles();
+  if(player.alive || state === S.RESULT || state === S.DEAD) drawPlayer(t);
+  ctx.restore();
+
+  ctx.restore();
+
+  drawForeground(t);
+  ctx.restore();
+
+  if(flash > 0.01){
+    ctx.fillStyle = `rgba(255,190,190,${flash * 0.28})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/* WebGL 미지원 환경용 하늘 */
+function drawSkyFallback(horizon, t){
+  const hy = (1 - horizon) * H;
+  const g = ctx.createLinearGradient(0, 0, 0, hy);
+  g.addColorStop(0, '#31254f');
+  g.addColorStop(0.55, '#5a3f79');
+  g.addColorStop(1, '#b79ac6');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, hy);
+  const sunX = W * 0.74, sunY = hy - H * 0.30;
+  const sg = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, H * 0.35);
+  sg.addColorStop(0, 'rgba(255,226,166,0.95)');
+  sg.addColorStop(0.25, 'rgba(255,205,150,0.28)');
+  sg.addColorStop(1, 'rgba(255,205,150,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(0, 0, W, hy + 40);
+  const fg = ctx.createLinearGradient(0, hy - H * 0.12, 0, hy + 10);
+  fg.addColorStop(0, 'rgba(209,218,240,0)');
+  fg.addColorStop(1, 'rgba(209,218,240,0.9)');
+  ctx.fillStyle = fg;
+  ctx.fillRect(0, hy - H * 0.12, W, H * 0.12 + 10);
+  ctx.fillStyle = '#d1daf0';
+  ctx.fillRect(0, hy, W, H - hy);
+}
+
+/* 셰이더 산 앞쪽의 2D 시차 숲 — 셰이더와 게임 지면을 잇는 중간 거리 */
+const FOREST = [
+  { p: 0.20, top: 118, col: 'rgba(150,158,196,0.62)', step: 62, amp: 26, jag: 0.9 },
+  { p: 0.36, top: 76,  col: 'rgba(112,146,150,0.72)', step: 46, amp: 22, jag: 1.4 },
+  { p: 0.58, top: 34,  col: 'rgba(74,116,104,0.86)',  step: 34, amp: 18, jag: 2.1 }
+];
+/* 배경 수평선은 월드 y=0이 아니라 카메라에 느슨하게 묶는다.
+   그래야 지형이 위아래로 흘러도 하늘·산·안개의 구도가 흔들리지 않는다. */
+function horizonY(){
+  const nominal = -VH * GROUND_FRAC;          // 지면이 기준 높이에 있을 때의 camera.y
+  return VH * GROUND_FRAC + (nominal - camera.y) * 0.12;
+}
+
+function drawParallaxForest(horizon, t){
+  const baseY = horizonY();
+  for(let li = 0; li < FOREST.length; li++){
+    const L = FOREST[li];
+    const off = camera.x * L.p;
+    const y0 = baseY - L.top;
+    ctx.fillStyle = L.col;
+    ctx.beginPath();
+    ctx.moveTo(-40, VH + 10);
+    const start = Math.floor((off - 60) / L.step) * L.step;
+    for(let wx = start; wx < off + VW + 80; wx += L.step){
+      const sxp = wx - off;
+      // 삼각 나무 실루엣
+      const n = Math.sin(wx * 0.021 + li * 3.1) * 0.5 + Math.sin(wx * 0.0071 + li) * 0.5;
+      const hgt = L.amp * (1.3 + n) * L.jag;
+      const sway = Math.sin(t * 0.5 + wx * 0.01) * (li + 1) * 0.7;
+      ctx.lineTo(sxp, y0 - hgt * 0.35);
+      ctx.lineTo(sxp + L.step * 0.5 + sway, y0 - hgt);
+      ctx.lineTo(sxp + L.step, y0 - hgt * 0.3);
     }
-    for(const hz of seg.hazards){
-      drawHazard(hz);
+    ctx.lineTo(VW + 60, VH + 10);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/* 안개 속 먼 공중 정원 — 아래쪽 빈 공간에 깊이를 만든다 */
+function drawFloatingIsles(t){
+  const baseY = horizonY();
+  for(let layer = 0; layer < 2; layer++){
+    const par = layer === 0 ? 0.30 : 0.46;
+    const span = 620 + layer * 190;
+    const off = camera.x * par;
+    const i0 = Math.floor((off - 300) / span);
+    const i1 = Math.ceil((off + VW + 300) / span);
+    for(let i = i0; i <= i1; i++){
+      const n = hash1(i * 7.31 + layer * 53.7);
+      if(n < 0.34) continue;
+      const sxp = i * span + n * 260 - off;
+      const iw = 90 + n * 190 - layer * 20;
+      const iy = baseY + 90 + hash1(i * 3.7 + layer) * 230 + layer * 60
+                 + Math.sin(t * 0.30 + i) * 5;
+      const a = layer === 0 ? 0.16 : 0.24;
+      const gI = ctx.createLinearGradient(0, iy - 3, 0, iy + iw * 0.5);
+      gI.addColorStop(0, `rgba(186,224,196,${a + 0.16})`);
+      gI.addColorStop(1, `rgba(150,182,196,0)`);
+      ctx.fillStyle = gI;
+      ctx.beginPath();
+      ctx.moveTo(sxp, iy);
+      ctx.lineTo(sxp + iw, iy);
+      ctx.lineTo(sxp + iw * 0.74, iy + iw * 0.24);
+      ctx.lineTo(sxp + iw * 0.44, iy + iw * 0.40);
+      ctx.lineTo(sxp + iw * 0.18, iy + iw * 0.20);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `rgba(214,244,218,${a + 0.20})`;
+      ctx.fillRect(sxp, iy - 2, iw, 2.5);
     }
   }
-
-  // ---------- 수집물 (씨앗) ----------
-  for(const s of WORLD.seeds){
-    if(s.collected) continue;
-    drawSeed(s);
-  }
-
-  // ---------- 파티클 ----------
-  for(const p of WORLD.particles){
-    const alpha = clamp(p.life / p.maxLife, 0, 1);
-    ctx2.globalAlpha = alpha;
-    ctx2.fillStyle = p.color;
-    const size = p.size * (0.6 + 0.4*alpha);
-    ctx2.beginPath();
-    ctx2.arc(p.x + p.w/2 - (p.w||0), p.y + p.h/2 - (p.h||0), size, 0, Math.PI*2);
-    ctx2.fill();
-  }
-  ctx2.globalAlpha = 1;
-
-  // ---------- 플레이어 ----------
-  if(player.alive || state===STATE.RESULT){
-    drawPlayer();
-  }
-
-  ctx2.restore();
-
-  // ---------- 화면 앞 안개/빛 번짐 레이어 ----------
-  drawForegroundFog();
 }
 
-function drawDistantClouds(){
-  // 셰이더에 이미 산/하늘이 있으니, 바로 위 중간에 떠 있는 느린 구름만 보조
-  ctx2.fillStyle = 'rgba(220,222,240,0.10)';
-  const cx = camera.x * 0.05; // 매우 느리게 움직임
-  for(let i=0;i<5;i++){
-    const x = ((i*213 + cx) % (W*2.5)) - W*0.25;
-    const y = 0.30*H + Math.sin(i*1.7 + gameTime*0.001)*14;
-    ctx2.beginPath();
-    ctx2.ellipse(x, y, 90 + Math.sin(i*2.1)*20, 18, 0, 0, Math.PI*2);
-    ctx2.fill();
+/* 떠다니는 빛 알갱이 (반딧불이) */
+function drawMotes(t){
+  for(let i = 0; i < world.motes.length; i++){
+    const m = world.motes[i];
+    const px = m.x - camera.x * m.depth;
+    const wrapW = VW + 400;
+    let sxp = ((px + 200) % wrapW + wrapW) % wrapW - 200;
+    const syp = m.y - camera.y * m.depth + Math.sin(t * m.sp + m.ph) * 18;
+    if(syp < -40 || syp > VH + 40) continue;
+    const a = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.6 + m.ph));
+    ctx.fillStyle = `rgba(255,236,168,${a * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(sxp, syp, m.r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,250,214,${a})`;
+    ctx.beginPath();
+    ctx.arc(sxp, syp, m.r, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-function drawGround(){
-  // 바닥: 화면 아래쪽 전체의 이끼/숲바닥 느낌
-  const gy = WORLD.groundY;
-  // 큰 그라데이션
-  const g = ctx2.createLinearGradient(0, gy, 0, gy+120);
-  g.addColorStop(0, 'rgba(46,64,52,0.95)');
-  g.addColorStop(0.5, 'rgba(30,46,38,0.95)');
-  g.addColorStop(1, 'rgba(14,24,20,0.98)');
-  ctx2.fillStyle = g;
-  ctx2.fillRect(camera.x - 40, gy, W+80, H+200);
-  // 표면 풀/잔디 라인
-  ctx2.strokeStyle = 'rgba(110,140,110,0.35)';
-  ctx2.lineWidth = 1.4;
-  ctx2.beginPath();
-  for(let x=Math.floor(camera.x-40); x<camera.x+W+40; x+=6){
-    const wave = Math.sin((x+camera.x)*0.04 + gameTime*0.003)*2.2;
-    ctx2.moveTo(x, gy + wave);
-    ctx2.lineTo(x+4, gy + wave + Math.sin((x+10)*0.05+gameTime*0.002)*1.6);
-  }
-  ctx2.stroke();
-  // 흙 점
-  ctx2.fillStyle = 'rgba(70,52,38,0.25)';
-  for(let i=0;i<40;i++){
-    const x = camera.x + ((i*97) % (W+80)) - 20;
-    const y = gy + 6 + ((i*53) % 80);
-    ctx2.beginPath();
-    ctx2.arc(x, y, 1.2 + ((i*13)%3), 0, Math.PI*2);
-    ctx2.fill();
+/* 절벽 지형 */
+function drawChunks(t){
+  const left = camera.x - 80, right = camera.x + VW + 80;
+
+  for(let i = 0; i < world.chunks.length; i++){
+    const c = world.chunks[i];
+    if(c.x + c.w < left || c.x > right) continue;
+    // ── 떠 있는 섬: 윗면은 이끼, 아랫면은 뜯겨 나간 흙 ──
+    const D = c.depth;
+
+    // 섬 실루엣 path
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.top);
+    ctx.lineTo(c.x + c.w, c.top);
+    ctx.lineTo(c.x + c.w - 6, c.top + D * 0.30);
+    for(let k = c.tail.length - 1; k >= 0; k--){
+      const p = c.tail[k];
+      ctx.lineTo(c.x + 6 + (c.w - 12) * p.t, c.top + D * p.d);
+    }
+    ctx.lineTo(c.x + 6, c.top + D * 0.30);
+    ctx.closePath();
+
+    const g = ctx.createLinearGradient(0, c.top, 0, c.top + D);
+    g.addColorStop(0, '#78c78c');
+    g.addColorStop(0.14, '#57a273');
+    g.addColorStop(0.40, '#6b7a58');
+    g.addColorStop(0.72, '#6d6247');
+    g.addColorStop(1, 'rgba(92,84,66,0.32)');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // 흙 속 자갈
+    for(let k = 0; k < c.rocks.length; k++){
+      const r = c.rocks[k];
+      const rx = c.x + c.w * r.t, ry = c.top + D * r.d;
+      ctx.fillStyle = `rgba(58,52,42,${0.30 * (1 - r.d)})`;
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, r.r, r.r * 0.72, r.t * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 아래로 갈수록 안개에 잠기게
+    const fade = ctx.createLinearGradient(0, c.top + D * 0.45, 0, c.top + D);
+    fade.addColorStop(0, 'rgba(214,228,244,0)');
+    fade.addColorStop(1, 'rgba(214,228,244,0.55)');
+    ctx.fillStyle = fade;
+    ctx.fill();
+
+    // 왼쪽 모서리 빛, 오른쪽 그늘 — 어디서 떨어지는지 읽히게
+    ctx.fillStyle = 'rgba(255,255,255,0.20)';
+    ctx.fillRect(c.x, c.top, 2.5, D * 0.34);
+    ctx.fillStyle = 'rgba(40,52,44,0.16)';
+    ctx.fillRect(c.x + c.w - 2.5, c.top, 2.5, D * 0.34);
+
+    // 이끼 윗면
+    const mg = ctx.createLinearGradient(0, c.top - 6, 0, c.top + 22);
+    mg.addColorStop(0, '#c8f4cd');
+    mg.addColorStop(0.35, '#8ad79c');
+    mg.addColorStop(1, 'rgba(124,196,140,0)');
+    ctx.fillStyle = mg;
+    ctx.fillRect(c.x, c.top - 4, c.w, 26);
+
+    // 빛나는 윗선
+    ctx.fillStyle = 'rgba(240,255,240,0.9)';
+    ctx.fillRect(c.x, c.top - 2, c.w, 2);
+
+    // 풀 — 성기게, 길이를 흩어서
+    ctx.strokeStyle = 'rgba(64,146,88,0.75)';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    // 낱개가 아니라 포기로 — 균일한 빗살처럼 보이지 않게
+    ctx.beginPath();
+    const gs = Math.max(c.x, left), ge = Math.min(c.x + c.w, right);
+    for(let x = Math.ceil(gs / 26) * 26; x < ge; x += 26){
+      const n = hash1(x);
+      if(n < 0.22) continue;
+      const bx = x + n * 18;
+      const blades = n > 0.7 ? 3 : 2;
+      for(let b = 0; b < blades; b++){
+        const m = hash1(x + b * 3.7);
+        const px = bx + (b - 1) * 3.6 + m * 2;
+        if(px < c.x || px > c.x + c.w) continue;
+        const len = 5 + m * 12;
+        const sway = Math.sin(t * 1.4 + px * 0.035) * (1.2 + m * 2.6);
+        ctx.moveTo(px, c.top - 1);
+        ctx.quadraticCurveTo(px + sway * 0.4, c.top - len * 0.6, px + sway, c.top - len);
+      }
+    }
+    ctx.stroke();
+
+    // 아랫면에서 늘어진 덩굴
+    ctx.strokeStyle = 'rgba(104,164,118,0.6)';
+    ctx.lineWidth = 2;
+    for(let k = 0; k < c.vines.length; k++){
+      const v = c.vines[k];
+      const tt = clamp((v.x - c.x) / c.w, 0.06, 0.94);
+      const rootY = c.top + D * (0.10 + 0.16 * Math.sin(tt * Math.PI));
+      const sway = Math.sin(t * 0.9 + v.ph) * 5;
+      ctx.beginPath();
+      ctx.moveTo(v.x, rootY - 10);
+      ctx.quadraticCurveTo(v.x + sway, rootY + v.len * 0.6, v.x + sway * 1.6, rootY + v.len);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(168,220,176,0.55)';
+      ctx.beginPath();
+      ctx.arc(v.x + sway * 1.6, rootY + v.len, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 빛나는 꽃
+    for(let k = 0; k < c.flowers.length; k++){
+      const f = c.flowers[k];
+      const pulse = 0.55 + 0.45 * Math.sin(t * 1.8 + f.ph);
+      const col = f.hue ? [255, 190, 230] : [186, 240, 255];
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.16 * pulse})`;
+      ctx.beginPath(); ctx.arc(f.x, c.top - 9, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.9 * pulse})`;
+      ctx.beginPath(); ctx.arc(f.x, c.top - 9, 2.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 공중 발판
+    for(let k = 0; k < c.plats.length; k++){
+      const p = c.plats[k];
+      const bob = Math.sin(t * 1.1 + p.x * 0.01) * 2.4;
+      const py = p.y + bob;
+      ctx.fillStyle = 'rgba(120,220,190,0.10)';
+      ctx.beginPath();
+      ctx.ellipse(p.x + p.w / 2, py + 6, p.w * 0.7, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const pg = ctx.createLinearGradient(0, py - 4, 0, py + p.h + 10);
+      pg.addColorStop(0, '#9ce2b4');
+      pg.addColorStop(0.35, '#4f8767');
+      pg.addColorStop(1, 'rgba(38,60,52,0.1)');
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.moveTo(p.x, py);
+      ctx.lineTo(p.x + p.w, py);
+      ctx.lineTo(p.x + p.w - 9, py + p.h + 9);
+      ctx.lineTo(p.x + 9, py + p.h + 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(206,255,222,0.85)';
+      ctx.fillRect(p.x, py - 2, p.w, 2.4);
+      // 발판 아래 뿌리
+      ctx.strokeStyle = 'rgba(120,170,140,0.4)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.w * 0.4, py + p.h + 8);
+      ctx.lineTo(p.x + p.w * 0.34, py + p.h + 22);
+      ctx.moveTo(p.x + p.w * 0.62, py + p.h + 8);
+      ctx.lineTo(p.x + p.w * 0.7, py + p.h + 18);
+      ctx.stroke();
+      p._drawY = py;
+    }
+
+    // 가시덤불 — 위험은 형태와 색으로 분명히 (판독 최우선)
+    for(let k = 0; k < c.spikes.length; k++){
+      const s = c.spikes[k];
+      const cxs = s.x + s.w / 2;
+      // 줄기
+      ctx.strokeStyle = '#7d3c46';
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cxs, c.top + 2);
+      ctx.lineTo(cxs, c.top - s.h * 0.55);
+      ctx.stroke();
+      // 가시 세 갈래
+      ctx.fillStyle = '#d2495e';
+      ctx.beginPath();
+      const barbs = [[-1, 0.55], [0, 1.0], [1, 0.72]];
+      for(let j = 0; j < barbs.length; j++){
+        const bx = cxs + barbs[j][0] * s.w * 0.42;
+        const bh = s.h * barbs[j][1];
+        ctx.moveTo(bx - s.w * 0.26, c.top + 1);
+        ctx.lineTo(bx, c.top - bh);
+        ctx.lineTo(bx + s.w * 0.26, c.top + 1);
+      }
+      ctx.fill();
+      // 끝의 반짝임
+      ctx.fillStyle = 'rgba(255,214,220,0.9)';
+      for(let j = 0; j < barbs.length; j++){
+        const bx = cxs + barbs[j][0] * s.w * 0.42;
+        ctx.beginPath();
+        ctx.arc(bx, c.top - s.h * barbs[j][1], 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 }
 
-function drawPlatform(p){
-  // 플랫폼 몸체
-  const grad = ctx2.createLinearGradient(p.x, p.y, p.x, p.y+p.h);
-  grad.addColorStop(0, 'rgba(90,120,100,0.95)');
-  grad.addColorStop(0.5, 'rgba(58,80,68,0.95)');
-  grad.addColorStop(1, 'rgba(34,52,44,0.95)');
-  ctx2.fillStyle = grad;
-  ctx2.fillRect(p.x, p.y, p.w, p.h);
-  // 상단 엣지 글로우
-  ctx2.fillStyle = 'rgba(150,190,160,0.6)';
-  ctx2.fillRect(p.x, p.y, p.w, 2.4);
-  // 측면 느낌
-  ctx2.strokeStyle = 'rgba(70,98,82,0.55)';
-  ctx2.lineWidth = 1.2;
-  ctx2.strokeRect(p.x+0.6, p.y+0.6, p.w-1.2, p.h-1.2);
-  // 플랫폼 위에 작은 이끼 점
-  ctx2.fillStyle = 'rgba(120,160,120,0.25)';
-  for(let i=0;i<4;i++){
-    const x = p.x + ((i*41 + p.seed||0) % p.w);
-    ctx2.beginPath();
-    ctx2.arc(x, p.y + 6 + ((i*13)%12), 1.6, 0, Math.PI*2);
-    ctx2.fill();
+function drawSeeds(t){
+  const left = camera.x - 60, right = camera.x + VW + 60;
+  for(let i = 0; i < world.chunks.length; i++){
+    const c = world.chunks[i];
+    if(c.x + c.w < left - 400 || c.x > right + 400) continue;
+    for(let k = 0; k < c.seeds.length; k++){
+      const s = c.seeds[k];
+      if(s.x < left || s.x > right) continue;
+      if(s.got){
+        if(s.pop < 1){
+          const a = 1 - s.pop;
+          ctx.strokeStyle = `rgba(255,228,150,${a * 0.6})`;
+          ctx.lineWidth = 2 * a;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 8 + s.pop * 26, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        continue;
+      }
+      const bob = Math.sin(t * 2.0 + s.ph) * 3.5;
+      const pulse = 0.72 + 0.28 * Math.sin(t * 3.0 + s.ph);
+      const y = s.y + bob;
+      ctx.fillStyle = `rgba(255,214,110,${0.13 * pulse})`;
+      ctx.beginPath(); ctx.arc(s.x, y, s.r * 4.0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,226,140,${0.28 * pulse})`;
+      ctx.beginPath(); ctx.arc(s.x, y, s.r * 2.0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,232,150,${0.96})`;
+      ctx.beginPath(); ctx.arc(s.x, y, s.r * 0.92, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,236,0.95)';
+      ctx.beginPath(); ctx.arc(s.x - s.r * 0.3, y - s.r * 0.32, s.r * 0.36, 0, Math.PI * 2); ctx.fill();
+      // 회전하는 작은 잎 두 장
+      const a = t * 1.6 + s.ph;
+      ctx.fillStyle = 'rgba(176,226,176,0.9)';
+      for(let j = 0; j < 2; j++){
+        ctx.save();
+        ctx.translate(s.x, y);
+        ctx.rotate(a + j * Math.PI);
+        ctx.beginPath();
+        ctx.ellipse(0, -s.r * 1.5, 1.5, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 }
 
-function drawHazard(hz){
-  // 덩굴/나뭇가지 장애물: 아래에서 올라오는 형태
-  const grad = ctx2.createLinearGradient(hz.x, hz.y+hz.h, hz.x, hz.y);
-  grad.addColorStop(0, 'rgba(60,40,30,0.9)');
-  grad.addColorStop(0.6, 'rgba(42,58,40,0.95)');
-  grad.addColorStop(1, 'rgba(70,90,70,0.95)');
-  ctx2.fillStyle = grad;
-  // 나뭇가지 느낌 다각형
-  ctx2.beginPath();
-  ctx2.moveTo(hz.x, hz.y+hz.h);
-  ctx2.lineTo(hz.x+4, hz.y+hz.h-20);
-  ctx2.lineTo(hz.x+8, hz.y+hz.h-40);
-  ctx2.lineTo(hz.x+hz.w-6, hz.y+12);
-  ctx2.lineTo(hz.x+hz.w, hz.y+6);
-  ctx2.lineTo(hz.x+hz.w, hz.y+hz.h);
-  ctx2.closePath();
-  ctx2.fill();
-  ctx2.strokeStyle = 'rgba(120,90,70,0.45)';
-  ctx2.lineWidth = 1.0;
-  ctx2.stroke();
-  // 작은 잎 점
-  ctx2.fillStyle = 'rgba(120,170,120,0.5)';
-  for(let i=0;i<3;i++){
-    const lx = hz.x + ((i*37+17)%hz.w);
-    const ly = hz.y + 10 + ((i*23)% (hz.h-10));
-    ctx2.beginPath();
-    ctx2.arc(lx, ly, 1.6, 0, Math.PI*2);
-    ctx2.fill();
+function drawParticles(){
+  const ps = world.particles;
+  for(let i = 0; i < ps.length; i++){
+    const p = ps[i];
+    const a = clamp(p.life / p.max, 0, 1);
+    ctx.fillStyle = `rgba(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]},${a * 0.85})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (0.45 + 0.55 * a), 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-function drawSeed(s){
-  const pulse = s.glow;
-  // 발광 후광
-  ctx2.fillStyle = `rgba(245,215,110,${0.18*pulse})`;
-  ctx2.beginPath();
-  ctx2.arc(s.x, s.y, s.r*4.2, 0, Math.PI*2);
-  ctx2.fill();
-  // 본체
-  ctx2.fillStyle = `rgba(255,220,90,${0.92*pulse})`;
-  ctx2.beginPath();
-  ctx2.arc(s.x, s.y, s.r*0.9, 0, Math.PI*2);
-  ctx2.fill();
-  ctx2.fillStyle = `rgba(255,250,200,${0.95})`;
-  ctx2.beginPath();
-  ctx2.arc(s.x - s.r*0.3, s.y - s.r*0.3, s.r*0.4, 0, Math.PI*2);
-  ctx2.fill();
-  // 작은 날개/잎
-  ctx2.fillStyle = 'rgba(180,220,170,0.85)';
-  const ang = runTime*0.03 + s.seed;
-  for(let i=0;i<2;i++){
-    const a = ang + i*Math.PI;
-    ctx2.save();
-    ctx2.translate(s.x, s.y);
-    ctx2.rotate(a);
-    ctx2.fillRect(-1.4, -3.2, 2.8, 6.4);
-    ctx2.restore();
-  }
-}
-
-function drawPlayer(){
+/* 캐릭터: 빛을 품은 작은 숲의 아이 */
+function drawPlayer(t){
   const px = player.x;
   const py = player.y;
-  // 바운스 (착지 직후)
-  const bounce = player.bounceT;
-  const by = bounce > 0 ? -Math.sin(bounce*Math.PI)*2.4 : 0;
-  // 달리기 애니메이션
-  const runFrame = player.onGround ? Math.sin(player.runTimer*0.18)*0.6 : 0;
-  const brisket = Math.sin(player.runTimer*0.18)*2.2;
+  const sq = clamp(player.squash, -1, 1);
+  const scaleY = 1 - sq * 0.20;
+  const scaleX = 1 + sq * 0.16;
+  const run = player.onGround ? Math.sin(player.runPhase) : 0;
+  const air = !player.onGround;
 
-  // 플레이어 글로우 후광 (따뜻한 주황-노랑)
-  ctx2.fillStyle = 'rgba(255,200,130,0.18)';
-  ctx2.beginPath();
-  ctx2.arc(px + player.w/2, py + player.h/2 + by, 26, 0, Math.PI*2);
-  ctx2.fill();
+  // 지면 그림자
+  const gc = chunkAtX(px);
+  if(gc){
+    const gy = gc.top;
+    const d = clamp(1 - (gy - py) / 220, 0.15, 1);
+    ctx.fillStyle = `rgba(12,20,18,${0.28 * d})`;
+    ctx.beginPath();
+    ctx.ellipse(px, gy - 1, 13 * d, 4 * d, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  const cx = px + player.w/2;
-  const cy = py + player.h/2 + by;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(scaleX, scaleY);
 
-  // 몸체 (둥근 캡슐형 작은 사람)
-  ctx2.fillStyle = PALETTE.player;
-  ctx2.beginPath();
-  ctx2.ellipse(cx, cy + 6, 9, 11, 0, 0, Math.PI*2);
-  ctx2.fill();
+  // 후광
+  const halo = ctx.createRadialGradient(0, -16, 2, 0, -16, 34);
+  halo.addColorStop(0, 'rgba(255,214,160,0.34)');
+  halo.addColorStop(1, 'rgba(255,214,160,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(0, -16, 34, 0, Math.PI * 2); ctx.fill();
 
-  // 머리
-  ctx2.fillStyle = 'rgba(250,220,190,0.98)';
-  ctx2.beginPath();
-  ctx2.arc(cx, cy - 4, 7.5, 0, Math.PI*2);
-  ctx2.fill();
+  // 다리
+  const swing = air ? 4 : run * 7;
+  ctx.strokeStyle = '#4a3524';
+  ctx.lineWidth = 3.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-2, -12); ctx.lineTo(-2 + swing, -1);
+  ctx.moveTo(2, -12);  ctx.lineTo(2 - swing, air ? -4 : -1);
+  ctx.stroke();
 
-  // 머리카락/모자 느낌
-  ctx2.fillStyle = 'rgba(120,90,70,0.95)';
-  ctx2.beginPath();
-  ctx2.arc(cx, cy - 7, 7.8, Math.PI*1.1, Math.PI*1.9);
-  ctx2.fill();
+  // 망토 (뒤로 나부낌)
+  ctx.fillStyle = 'rgba(196,92,96,0.92)';
+  ctx.beginPath();
+  ctx.moveTo(-3, -26);
+  ctx.quadraticCurveTo(-14 - Math.abs(run) * 3, -20, -13 - (air ? 6 : Math.abs(run) * 4), -6);
+  ctx.lineTo(-2, -12);
+  ctx.closePath();
+  ctx.fill();
 
-  // 눈
-  ctx2.fillStyle = '#1a1208';
-  ctx2.beginPath();
-  ctx2.arc(cx + (player.facing*2.4) - 2.4, cy - 4.5, 1.3, 0, Math.PI*2);
-  ctx2.fill();
-
-  // 상의 (간단한 조끼/망토 느낌)
-  ctx2.fillStyle = 'rgba(180,90,80,0.95)';
-  ctx2.beginPath();
-  ctx2.moveTo(cx - 7 + (player.facing*2), cy + 2);
-  ctx2.lineTo(cx + 7 + (player.facing*2), cy + 2);
-  ctx2.lineTo(cx + 9 + (player.facing*2), cy + 12);
-  ctx2.lineTo(cx - 9 + (player.facing*2), cy + 12);
-  ctx2.closePath();
-  ctx2.fill();
-
-  // 다리 (달리기 모션)
-  const legSwing = player.onGround ? Math.sin(player.runTimer*0.18)*6 : 2;
-  ctx2.fillStyle = 'rgba(60,40,30,0.95)';
-  // 왼쪽 다리
-  ctx2.fillRect(cx - 5 + (player.facing*2) - 1, cy + 10 + legSwing, 3.2, 11);
-  // 오른쪽 다리
-  ctx2.fillRect(cx + 2 + (player.facing*2) - 1, cy + 10 - legSwing, 3.2, 11);
+  // 몸통
+  const body = ctx.createLinearGradient(0, -28, 0, -10);
+  body.addColorStop(0, '#f0b071');
+  body.addColorStop(1, '#c9743f');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, -19, 7.4, 9.4, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   // 팔
-  ctx2.fillStyle = 'rgba(250,220,190,0.98)';
-  const armSwing = player.onGround ? Math.sin(player.runTimer*0.18 + Math.PI)*4 : 0;
-  ctx2.fillRect(cx - 8 + (player.facing*2), cy - 2 + armSwing, 3, 7);
-  ctx2.fillRect(cx + 6 + (player.facing*2), cy - 2 - armSwing, 3, 7);
+  ctx.strokeStyle = '#f6d8b8';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  const arm = air ? -6 : run * 6;
+  ctx.moveTo(0, -23); ctx.lineTo(7, -23 + arm * 0.5 + (air ? -5 : 0));
+  ctx.moveTo(0, -23); ctx.lineTo(-6, -23 - arm * 0.5);
+  ctx.stroke();
 
-  // 달리기 먼지 (지면 근처 자동)
-  if(player.onGround && simTime % 4 === 0){
-    emitTrail(cx + (player.facing*2), py + player.h + 2, PALETTE.ground, 2);
-  }
+  // 머리
+  ctx.fillStyle = '#f9dfc2';
+  ctx.beginPath(); ctx.arc(1, -33, 7, 0, Math.PI * 2); ctx.fill();
+  // 머리카락
+  ctx.fillStyle = '#4c3b2a';
+  ctx.beginPath();
+  ctx.arc(1, -34.5, 7.2, Math.PI * 0.98, Math.PI * 2.05);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-5.4, -34);
+  ctx.quadraticCurveTo(-12 - (air ? 3 : Math.abs(run) * 2), -33, -10, -27);
+  ctx.quadraticCurveTo(-7, -30, -5, -31);
+  ctx.fill();
+  // 눈
+  ctx.fillStyle = '#241a10';
+  ctx.beginPath(); ctx.arc(4.2, -32.6, 1.25, 0, Math.PI * 2); ctx.fill();
+  // 볼
+  ctx.fillStyle = 'rgba(232,140,120,0.5)';
+  ctx.beginPath(); ctx.arc(6, -30, 1.7, 0, Math.PI * 2); ctx.fill();
+
+  // 손에 든 작은 빛
+  const lp = 0.7 + 0.3 * Math.sin(t * 4);
+  ctx.fillStyle = `rgba(180,255,220,${0.22 * lp})`;
+  ctx.beginPath(); ctx.arc(8, -22, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgba(226,255,240,${0.95 * lp})`;
+  ctx.beginPath(); ctx.arc(8, -22, 2.4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
 }
 
-function drawForegroundFog(){
-  // 화면 앞쪽에 살짝 안개/빛 번짐으로 깊이감 + 셰이더와 2D 연결
-  const g = ctx2.createRadialGradient(W*0.5, H*0.62, 40, W*0.5, H*0.62, Math.max(W,H)*0.7);
-  g.addColorStop(0, 'rgba(255,250,240,0.0)');
-  g.addColorStop(0.7, 'rgba(255,250,240,0.0)');
-  g.addColorStop(1, 'rgba(200,205,220,0.18)');
-  ctx2.fillStyle = g;
-  ctx2.fillRect(0,0,W,H);
-  // 하단 빛 내림
-  const g2 = ctx2.createLinearGradient(0, H*0.7, 0, H);
-  g2.addColorStop(0, 'rgba(255,250,235,0.0)');
-  g2.addColorStop(1, 'rgba(255,240,210,0.10)');
-  ctx2.fillStyle = g2;
-  ctx2.fillRect(0, H*0.7, W, H*0.3);
-}
-
-// ---------- 루프 ----------
-let lastT = performance.now();
-let footClock = 0;
-function loop(now){
-  const dt = Math.min(now - lastT, 32);
-  lastT = now;
-  // 시간적 보간: 60fps에 근사하도록 프레임 카운트 사용 (단순화)
-  update();
-  // 발소리 타이밍 (속도 따라)
-  if(state === STATE.RUNNING){
-    const speed = lerp(WORLD.runSpeedBase, WORLD.runSpeedMax, clamp(runTime*WORLD.speedAccel,0,1));
-    const footRate = clamp(0.26 - speed*0.012, 0.06, 0.30);
-    footClock += dt*0.001;
-    if(footClock > footRate){
-      footClock = 0;
-      const ratio = (speed - WORLD.runSpeedBase)/(WORLD.runSpeedMax - WORLD.runSpeedBase);
-      sfxFoot(clamp(ratio,0,1));
+/* 화면 앞 레이어: 속도선 + 안개 + 비네트 */
+function drawForeground(t){
+  if(state === S.RUN && !reduceMotion){
+    const ratio = clamp((speedAt(player.x) - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1);
+    if(ratio > 0.15){
+      ctx.strokeStyle = `rgba(255,255,255,${0.05 + ratio * 0.07})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for(let i = 0; i < 7; i++){
+        const y = ((i * 137 + t * 900 * ratio) % (H + 100)) - 50;
+        const x = ((i * 311 + t * 1400 * ratio) % (W + 300)) - 150;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 60 - ratio * 70, y + 6);
+      }
+      ctx.stroke();
     }
   }
-  // 바운스 감쇠
-  if(player.bounceT > 0) player.bounceT = Math.max(0, player.bounceT - 0.04);
+  const g = ctx.createLinearGradient(0, H * 0.78, 0, H);
+  g.addColorStop(0, 'rgba(214,228,244,0)');
+  g.addColorStop(1, 'rgba(214,228,244,0.22)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, H * 0.78, W, H * 0.22);
 
-  // 런 타이머 (달리기 프레임)
-  if(state === STATE.RUNNING) player.runTimer += 1;
+  const v = ctx.createRadialGradient(W * 0.5, H * 0.48, Math.min(W, H) * 0.42,
+                                     W * 0.5, H * 0.48, Math.max(W, H) * 0.80);
+  v.addColorStop(0, 'rgba(40,34,70,0)');
+  v.addColorStop(1, 'rgba(40,34,70,0.22)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
 
-  draw();
+/* ============================================================
+   루프 (고정 스텝 + 가변 렌더)
+   ============================================================ */
+const FIXED = 1000 / 60;
+let acc = 0;
+let last = 0;
 
+function loop(now){
+  if(!last) last = now;
+  let dt = now - last;
+  last = now;
+  if(dt > 100) dt = 100;                 // 탭 복귀 시 폭주 방지
+  acc += dt;
+  let guard = 0;
+  while(acc >= FIXED && guard++ < 6){
+    step();
+    acc -= FIXED;
+  }
+  if(state === S.INTRO && now >= introUntil){
+    state = S.RUN;
+    $('intro').hidden = true;
+  }
+  updateVisuals(dt);
+  draw(now);
   requestAnimationFrame(loop);
 }
 
-// ---------- 입력 ----------
-const keys = {};
-let tapStart = 0;
-let swipeStartX = 0, swipeStartY = 0, swiping = false;
+/* ============================================================
+   입력
+   ============================================================ */
+const input = { jumpHeld: false, steer: 0, left: false, right: false };
 
-window.addEventListener('keydown', (e)=>{
-  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-  keys[e.key] = true;
-  if(e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W'){
-    if(state === STATE.START || state === STATE.RESULT || state === STATE.INTRO){
-      startRun(false);
-      return;
-    }
-    player.jumpHeld = true;
-  }
-  if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.steer = -1;
-  if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.steer = 1;
-});
-window.addEventListener('keyup', (e)=>{
-  keys[e.key] = false;
-  if(e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') player.jumpHeld = false;
-  if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'){ if(player.steer===-1) player.steer=0; }
-  if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ if(player.steer===1) player.steer=0; }
-});
+function pressJump(){
+  if(state === S.START || state === S.RESULT){ startRun(false); return; }
+  if(state === S.PAUSE){ togglePause(); return; }
+  input.jumpHeld = true;
+  if(state === S.RUN || state === S.INTRO) player.buffer = BUFFER;
+}
+function releaseJump(){ input.jumpHeld = false; }
 
-// 터치
-canvas.addEventListener('touchstart', (e)=>{
-  e.preventDefault();
-  const t = e.touches[0];
-  tapStart = performance.now();
-  swipeStartX = t.clientX; swipeStartY = t.clientY; swiping = true;
-  // 인트로/시작에서 탭하면 시작
-  if(state === STATE.INTRO || state === STATE.START || state === STATE.RESULT){
-    startRun(true);
+window.addEventListener('keydown', (e) => {
+  if(e.repeat){
+    if(e.key === ' ' || e.key === 'ArrowUp') e.preventDefault();
     return;
   }
-  player.jumpHeld = true;
-}, { passive:false });
-canvas.addEventListener('touchmove', (e)=>{
-  e.preventDefault();
-  const t = e.touches[0];
-  const dx = t.clientX - swipeStartX;
-  const dy = t.clientY - swipeStartY;
-  // 좌우 스와이프 = 이동 (수평 우선순위)
-  if(Math.abs(dx) > 12) player.steer = dx > 0 ? 1 : -1;
-  else if(Math.abs(player.steer) < 0.05) player.steer = 0;
-}, { passive:false });
-canvas.addEventListener('touchend', (e)=>{
-  e.preventDefault();
-  swiping = false;
-  // 변수 점프: 누른 시간에 따라 높이 (짧게=기본, 길게=더 높게)
-  const hold = performance.now() - tapStart;
-  if(hold > 300){
-    // 길게 누른 경우 추가 상승 효과 (물리엔에서 변수점프로 반영됨)
-  }
-  player.jumpHeld = false;
-  player.steer = 0;
-}, { passive:false });
-// 마우스 클릭도 시작/재시작 지원 (모바일 아님)
-canvas.addEventListener('mousedown', (e)=>{
-  if(state === STATE.INTRO || state === STATE.START || state === STATE.RESULT){
-    startRun(false);
-  } else {
-    player.jumpHeld = true;
+  const k = e.key;
+  if(k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W' || k === 'Spacebar'){
+    e.preventDefault();
+    pressJump();
+  }else if(k === 'ArrowLeft' || k === 'a' || k === 'A'){
+    e.preventDefault(); input.left = true; input.steer = -1;
+  }else if(k === 'ArrowRight' || k === 'd' || k === 'D'){
+    e.preventDefault(); input.right = true; input.steer = 1;
+  }else if(k === 'ArrowDown'){
+    e.preventDefault();
+  }else if(k === 'r' || k === 'R'){
+    if(state === S.RUN || state === S.RESULT || state === S.PAUSE) startRun(false);
+  }else if(k === 'm' || k === 'M'){
+    setMuted(!muted);
+  }else if(k === 'p' || k === 'P' || k === 'Escape'){
+    togglePause();
   }
 });
-window.addEventListener('mouseup', (e)=>{
-  player.jumpHeld = false;
+window.addEventListener('keyup', (e) => {
+  const k = e.key;
+  if(k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W' || k === 'Spacebar') releaseJump();
+  if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ input.left = false; input.steer = input.right ? 1 : 0; }
+  if(k === 'ArrowRight' || k === 'd' || k === 'D'){ input.right = false; input.steer = input.left ? -1 : 0; }
 });
 
-// ---------- 시작/재시작 ----------
-function startRun(fromTouch){
-  initAudio();
-  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  // 시드 결정
-  if(state === STATE.START){
-    seed = Math.floor(Math.random()*1000000);
-    $('seedVal').textContent = seed;
-    $('startSeedVal').textContent = seed;
-  } else {
-    // 재시도: 같은 시드 or 새 시드?
-    // 같은 시드로 재도전 — 자연스럽게 플레이 세션 유지
-    $('seedVal').textContent = seed;
+/* 포인터 (마우스 + 터치 통합) */
+const scene = $('scene');
+let pointerId = null, startPX = 0, swiped = false;
+
+scene.addEventListener('pointerdown', (e) => {
+  if(pointerId !== null) return;
+  pointerId = e.pointerId;
+  startPX = e.clientX;
+  swiped = false;
+  scene.setPointerCapture(e.pointerId);
+  pressJump();
+});
+scene.addEventListener('pointermove', (e) => {
+  if(e.pointerId !== pointerId) return;
+  const dx = e.clientX - startPX;
+  if(Math.abs(dx) > 26){
+    input.steer = dx > 0 ? 1 : -1;
+    swiped = true;
+  }else if(swiped){
+    input.steer = 0;
   }
-  // 월드 재구성
-  WORLD.groundY = H * 0.72;
+});
+function endPointer(e){
+  if(e.pointerId !== pointerId) return;
+  pointerId = null;
+  releaseJump();
+  input.steer = input.left ? -1 : (input.right ? 1 : 0);
+}
+scene.addEventListener('pointerup', endPointer);
+scene.addEventListener('pointercancel', endPointer);
+scene.addEventListener('contextmenu', (e) => e.preventDefault());
+
+/* ============================================================
+   상태 전환
+   ============================================================ */
+function show(id, on){ $(id).hidden = !on; }
+
+function togglePause(){
+  if(state === S.RUN || state === S.INTRO){
+    prevState = state;
+    state = S.PAUSE;
+    show('pauseVeil', true);
+    if(actx && actx.state === 'running') actx.suspend();
+  }else if(state === S.PAUSE){
+    state = prevState === S.INTRO ? S.RUN : prevState;
+    show('pauseVeil', false);
+    show('intro', false);
+    last = 0; acc = 0;
+    if(actx && actx.state === 'suspended') actx.resume();
+  }
+}
+
+function startRun(newSeed){
+  initAudio();
+  if(actx && actx.state === 'suspended') actx.resume();
+  if(newSeed) seed = (Math.random() * 0xFFFFFFFF) >>> 0;
+
+  $('seedVal').textContent = seed;
+  $('startSeedVal').textContent = seed;
+
   rebuildWorld(seed);
-  // 플레이어 초기화
-  player.x = camera.x + W*0.32;
-  player.y = WORLD.groundY - player.h;
+
+  const first = world.chunks[0];
+  player.x = first.x + first.w - 600;                  // 첫 틈까지 600px 활주로
+  startX = player.x;
+  player.y = first.top;
   player.vy = 0;
   player.onGround = true;
   player.alive = true;
-  player.bounceT = 0;
-  player.runTimer = 0;
+  player.coyote = COYOTE;
+  player.buffer = 0;
+  player.jumping = false;
+  player.squash = 0;
+  player.runPhase = 0;
   player.steer = 0;
-  player.jumpHeld = false;
-  player._jumpConsumed = false;
-  seedsCollected = 0;
-  distance = 0;
-  runTime = 0;
-  scoreRun = 0;
-  state = STATE.INTRO;
-  $('startOverlay').style.display = 'none';
-  $('resultCard').classList.remove('show');
-  $('resultCard').style.display = 'none';
-  $('introBanner').style.display = 'flex';
-  // 인트로 타이머 후 바로 RUNNING
-  setTimeout(()=>{
-    state = STATE.RUNNING;
-    $('introBanner').style.display = 'none';
-    // 터치 힌트 (모바일)
-    if('ontouchstart' in window){
-      $('touchHint').classList.add('show');
-      setTimeout(()=>$('touchHint').classList.remove('show'), 3000);
-    }
-  }, 900);
-  $('hint').style.opacity = 1;
-}
 
-// ---------- 초기 로드 ----------
-function init(){
-  resize();
-  // 베스트 기록 복원
-  try{ bestScore = parseInt(localStorage.getItem('luminarun_best')||'0',10) || 0; }catch(e){ bestScore=0; }
-  seed = Math.floor(Math.random()*1000000);
-  $('seedVal').textContent = seed;
-  $('startSeedVal').textContent = seed;
+  camera.groundRef = player.y;
+  camera.x = player.x - VW * 0.32;
+  camera.y = player.y - VH * GROUND_FRAC;
+  camera.shake = 0;
+  flash = 0;
+
+  distance = 0; seeds = 0; runFrames = 0;
   $('dist').textContent = '0';
   $('seedCount').textContent = '0';
-  WORLD.groundY = H * 0.72;
-  rebuildWorld(seed);
-  player.x = camera.x + W*0.32;
-  player.y = WORLD.groundY - player.h;
-  camera.targetX = player.x - W*0.32;
-  camera.x = camera.targetX;
-  camera.targetY = WORLD.groundY - H*0.55;
-  camera.y = camera.targetY;
-  requestAnimationFrame(loop);
+  $('bestVal').textContent = best;
+
+  show('startVeil', false);
+  show('resultVeil', false);
+  show('pauseVeil', false);
+  show('intro', true);
+  $('intro').firstElementChild.style.animation = 'none';
+  void $('intro').offsetWidth;
+  $('intro').firstElementChild.style.animation = '';
+
+  // 조작 안내는 달리기 시작 후 잠시 뒤 물러난다
+  $('hint').classList.remove('fade');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => $('hint').classList.add('fade'), 5200);
+
+  state = S.INTRO;
+  introUntil = performance.now() + (reduceMotion ? 200 : 800);
+  last = 0; acc = 0;
+  $('live').textContent = '';
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
-// 버튼
-$('startBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startRun(false); });
-$('retryBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startRun(false); });
-$('newSeedBtn').addEventListener('click', (e)=>{ e.stopPropagation(); seed = Math.floor(Math.random()*1000000); startRun(false); });
+/* 시드 링크 공유 */
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+function shareSeed(){
+  const url = location.origin + location.pathname + '?seed=' + seed;
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(url)
+      .then(() => toast('링크를 복사했다 · seed ' + seed))
+      .catch(() => toast('seed ' + seed + ' 를 직접 공유하세요'));
+  }else{
+    toast('seed ' + seed + ' 를 직접 공유하세요');
+  }
+}
 
+/* ---------- 버튼 ---------- */
+$('startBtn').addEventListener('click', (e) => { e.stopPropagation(); startRun(false); });
+$('retryBtn').addEventListener('click', (e) => { e.stopPropagation(); startRun(false); });
+$('newSeedBtn').addEventListener('click', (e) => { e.stopPropagation(); startRun(true); });
+$('shareBtn').addEventListener('click', (e) => { e.stopPropagation(); shareSeed(); });
+$('resumeBtn').addEventListener('click', (e) => { e.stopPropagation(); togglePause(); });
+$('muteBtn').addEventListener('click', (e) => { e.stopPropagation(); setMuted(!muted); e.currentTarget.blur(); });
+$('startVeil').addEventListener('click', (e) => { if(e.target === e.currentTarget) startRun(false); });
+
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && (state === S.RUN || state === S.INTRO)) togglePause();
+});
+
+/* ============================================================
+   부팅
+   ============================================================ */
+function init(){
+  resize();
+  glReady = initShader();
+  if(!glReady && gl) console.warn('WebGL 셰이더 초기화 실패 — 2D 폴백 하늘로 렌더합니다.');
+
+  try{ best = parseInt(localStorage.getItem('luminarun_best') || '0', 10) || 0; }catch(e){ best = 0; }
+  try{ muted = localStorage.getItem('luminarun_muted') === '1'; }catch(e){ muted = false; }
+  setMuted(muted);
+  $('bestVal').textContent = best;
+
+  // ?seed=12345 로 같은 세계 공유
+  const q = new URLSearchParams(location.search).get('seed');
+  const parsed = q !== null ? parseInt(q, 10) : NaN;
+  seed = Number.isFinite(parsed) ? (parsed >>> 0) : (Math.random() * 0xFFFFFFFF) >>> 0;
+
+  $('seedVal').textContent = seed;
+  $('startSeedVal').textContent = seed;
+
+  // 시작 화면에서도 세계가 살아 움직이도록 미리 만들어 둔다
+  rebuildWorld(seed);
+  const first = world.chunks[0];
+  player.x = first.x + first.w - 600;                  // 첫 틈까지 600px 활주로
+  startX = player.x;
+  player.y = first.top;
+  player.alive = true;
+  camera.groundRef = player.y;
+  camera.x = player.x - VW * 0.32;
+  camera.y = player.y - VH * GROUND_FRAC;
+
+  requestAnimationFrame(loop);
+}
 init();
 </script>
 </body>
