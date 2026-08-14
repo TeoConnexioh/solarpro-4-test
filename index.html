@@ -214,7 +214,7 @@ const FRAG = `
 
     // 하늘 그라데이션 (top→bottom)
     vec3 skyTop = u_sky.xyz;
-    vec3 skyBot = u_sky.zw; // u_sky.zw가 bottom으로 쓰여지도록 함
+    vec3 skyBot = vec3(u_sky.z, u_sky.w, 0.0); // bottom 두 채널 + 명시적 3rd
     vec3 sky = mix(skyBot, skyTop, pow(uv.y, 0.7));
     // 태양 글로우 (태양이 화면 위쪽에 있다고 가정)
     float sunDir = u_sun.z; // 방향 지표
@@ -269,9 +269,9 @@ function ensureShaderProgram(){
   const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, VERT); gl.compileShader(vs);
   if(!gl.getShaderParameter(vs, gl.COMPILE_STATUS)){ console.warn('vertex shader error', gl.getShaderInfoLog(vs)); }
   const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, FRAG); gl.compileShader(fs);
-  if(!gl.getShaderParameter(fs, gl.COMPILE_STATUS)){ console.warn('fragment shader error', gl.getShaderInfoLog(fs)); }
+  if(!gl.getShaderParameter(fs, gl.COMPILE_STATUS)){ console.error('FRAGMENT SHADER COMPILE ERROR:', gl.getShaderInfoLog(fs)); }
   const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.warn('link error', gl.getProgramInfoLog(prog)); }
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.error('SHADER PROGRAM LINK ERROR:', gl.getProgramInfoLog(prog)); }
   const u_res = gl.getUniformLocation(prog, 'u_res');
   const u_time = gl.getUniformLocation(prog, 'u_time');
   const u_sky = gl.getUniformLocation(prog, 'u_sky');
