@@ -214,7 +214,7 @@ const FRAG = `
 
     // 하늘 그라데이션 (top→bottom)
     vec3 skyTop = u_sky.xyz;
-    vec3 skyBot = vec3(u_sky.z, u_sky.w, 0.0); // bottom 두 채널 + 명시적 3rd
+    vec3 skyBot = vec3(u_sky.z, u_sky.w, 1.0); // bottom 두 채널 + 알파는 불투명
     vec3 sky = mix(skyBot, skyTop, pow(uv.y, 0.7));
     // 태양 글로우 (태양이 화면 위쪽에 있다고 가정)
     float sunDir = u_sun.z; // 방향 지표
@@ -752,7 +752,7 @@ function draw(){
   const wind = { x: Math.sin(gameTime*0.003)*0.4+0.6, y:0 };
   drawBackground(simTime*0.016, {r:skyTop.r,g:skyTop.g,b:skyTop.b,a:skyTop.a}, {r:skyBot.r,g:skyBot.g,b:skyBot.b,a:skyBot.a}, haze, fog, sun, wind);
   // 2D 캔버스 리셋 (gl은 알파 꺼져있으니 합성 안전)
-  ctx2.setTransform(DPR,0,0,DPR,0,0);
+  if(ctx2){ ctx2.setTransform(DPR,0,0,DPR,0,0); }
   ctx2.clearRect(0,0,W,H);
 
   // 카메라 보정
